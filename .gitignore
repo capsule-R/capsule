@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.env.local
+.env.development
+.env.staging
+.env.production
+*.pyo
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# Rust
+target/
+# Cargo.lock — commit this for binary crates; uncomment only for library crates
+# Cargo.lock
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+# IDEs
+.vscode/
+.claude/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Capsule local data
+.capsule/
+*.capsule
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Build artifacts
+*.whl
+maturin/
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db

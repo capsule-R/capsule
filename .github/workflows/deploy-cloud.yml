@@ -1,0 +1,106 @@
+name: Deploy Cloud
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/cloud-api/**"
+      - "packages/cloud-web/**"
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+jobs:
+  deploy-api-staging:
+    name: Deploy API — Staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || inputs.environment == 'staging'
+    environment: staging
+    defaults:
+      run:
+        working-directory: packages/cloud-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t capsule-api:${{ github.sha }} .
+
+      - name: Deploy to Railway (staging)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+        run: |
+          npx @railway/cli up --service capsule-api --environment staging
+
+  deploy-web-staging:
+    name: Deploy Web — Staging (Vercel)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || inputs.environment == 'staging'
+    environment: staging
+    defaults:
+      run:
+        working-directory: packages/cloud-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Deploy to Vercel (staging)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx vercel deploy --token $VERCEL_TOKEN
+
+  smoke-test-staging:
+    name: Smoke Test — Staging
+    needs: [deploy-api-staging, deploy-web-staging]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run smoke tests
+        env:
+          API_URL: https://staging.api.capsule.dev
+        run: |
+          curl -f $API_URL/api/v1/health || exit 1
+          echo "Staging smoke test passed"
+
+  deploy-production:
+    name: Deploy — Production (Manual Approval Required)
+    needs: smoke-test-staging
+    runs-on: ubuntu-latest
+    if: inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://capsule.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy API to Railway (production)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
+        working-directory: packages/cloud-api
+        run: npx @railway/cli up --service capsule-api --environment production
+
+      - name: Deploy Web to Vercel (production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: packages/cloud-web
+        run: npx vercel deploy --prod --token $VERCEL_TOKEN
+
+      - name: Post-deploy health check
+        run: |
+          sleep 30
+          curl -f https://api.capsule.dev/api/v1/health || exit 1
