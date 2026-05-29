@@ -103,13 +103,33 @@ class Settings(BaseSettings):
     max_upload_size_pro: int = 500 * 1024 * 1024
     max_upload_size_business: int = 5 * 1024 * 1024 * 1024
 
-    # CORS
-    allowed_origins: list[str] = [
-        "http://localhost:3000",
-        "https://capsule.dev",
-        "https://*.vercel.app",
-        "https://*.railway.app",
-    ]
+    # CORS — plain str so pydantic-settings never tries to json.loads() it.
+    # Accepts comma-separated origins or a JSON array string.
+    # Leave empty → safe defaults are used.
+    allowed_origins: str = (
+        "http://localhost:3000,"
+        "https://capsule.dev,"
+        "https://*.vercel.app,"
+        "https://*.railway.app"
+    )
+
+    def get_cors_origins(self) -> list[str]:
+        """Parse allowed_origins into a list for CORSMiddleware."""
+        v = (self.allowed_origins or "").strip()
+        if not v:
+            return [
+                "http://localhost:3000",
+                "https://capsule.dev",
+                "https://*.vercel.app",
+                "https://*.railway.app",
+            ]
+        if v.startswith("["):
+            import json
+            try:
+                return json.loads(v)
+            except Exception:
+                pass
+        return [o.strip() for o in v.split(",") if o.strip()]
 
 
 _settings: Settings | None = None
