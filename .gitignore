@@ -56,8 +56,10 @@ next-env.d.ts
 
 # Secrets — never commit
 .env
-.env.*
-!.env.example
+.env.local
+.env.development
+.env.staging
+.env.production
 secrets/
 *.pem
 *.key
