@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
 from capsule_cloud.config import get_settings
 
@@ -14,27 +14,28 @@ class Base(DeclarativeBase):
 
 def get_engine():
     settings = get_settings()
-    return create_engine(
+    return create_async_engine(
         settings.database_url,
-        connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+        echo=settings.debug,
     )
 
 
 def get_session_factory():
-    return sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+    return async_sessionmaker(get_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
-def get_db():
-    """FastAPI dependency — yields a DB session."""
-    Session = get_session_factory()
-    db = Session()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    """FastAPI dependency — yields an async DB session."""
+    async_session = get_session_factory()
+    async with async_session() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
-def create_tables() -> None:
+async def create_tables() -> None:
     """Create all tables (used in dev / tests)."""
     engine = get_engine()
-    Base.metadata.create_all(engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

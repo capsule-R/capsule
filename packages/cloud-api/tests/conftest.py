@@ -3,6 +3,8 @@
 Strategy: each test gets its own file-based SQLite database via tmp_path.
 We reset the get_settings() singleton and set DATABASE_URL so that both
 create_tables() (lifespan) and get_db() (dependency) use the same DB.
+
+NOTE: SQLite async requires the `aiosqlite` package (add to dev dependencies).
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ def client(tmp_path):
     """Fresh FastAPI TestClient backed by an isolated SQLite file."""
     import capsule_cloud.config as cfg
 
-    db_url = f"sqlite:///{tmp_path}/test.db"
+    db_url = f"sqlite+aiosqlite:///{tmp_path}/test.db"
 
     # Reset the singleton so get_settings() re-reads env vars
     old_settings = cfg._settings

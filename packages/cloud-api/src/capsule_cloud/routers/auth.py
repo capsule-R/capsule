@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session as DBSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.auth import (
     create_access_token,
@@ -23,9 +24,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def signup(body: SignupRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
+async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     """Create a new user account and return JWT tokens."""
-    existing = db.query(User).filter(User.email == body.email).first()
+    result = await db.execute(select(User).where(User.email == body.email))
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -62,7 +64,7 @@ def signup(body: SignupRequest, db: DBSession = Depends(get_db)) -> TokenRespons
         role="owner",
     )
     db.add(member)
-    db.commit()
+    await db.commit()
 
     settings = get_settings()
     return TokenResponse(
@@ -73,9 +75,12 @@ def signup(body: SignupRequest, db: DBSession = Depends(get_db)) -> TokenRespons
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     """Authenticate with email/password and return JWT tokens."""
-    user = db.query(User).filter(User.email == str(body.email), User.deleted_at.is_(None)).first()
+    result = await db.execute(
+        select(User).where(User.email == str(body.email), User.deleted_at.is_(None))
+    )
+    user = result.scalars().first()
     if user is None or user.hashed_password is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -95,7 +100,7 @@ def login(body: LoginRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_token(
+async def refresh_token(
     current_user: User = Depends(get_current_user_from_refresh),
 ) -> TokenResponse:
     """Exchange a refresh token for a new access+refresh token pair."""
@@ -108,6 +113,6 @@ def refresh_token(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)) -> User:
+async def get_me(current_user: User = Depends(get_current_user)) -> User:
     """Return the currently authenticated user's profile."""
     return current_user

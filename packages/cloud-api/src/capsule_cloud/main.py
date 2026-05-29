@@ -28,7 +28,7 @@ __version__ = "0.1.0"
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     logger.info("capsule_cloud.startup", environment=settings.environment, version=__version__)
-    create_tables()
+    await create_tables()
     yield
     logger.info("capsule_cloud.shutdown")
 

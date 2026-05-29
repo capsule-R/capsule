@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session as DBSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.auth import generate_api_key, get_current_user, get_workspace_member
 from capsule_cloud.database import get_db
@@ -17,14 +18,14 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/api-keys", tags=["api-keys
 
 
 @router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
-def create_api_key(
+async def create_api_key(
     workspace_id: str,
     body: CreateApiKeyRequest,
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiKeyResponse:
     """Create a new API key for the workspace. The full key is only returned once."""
-    get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
 
     full_key, key_prefix, key_hash = generate_api_key()
 
@@ -38,8 +39,8 @@ def create_api_key(
         expires_at=body.expires_at,
     )
     db.add(api_key)
-    db.commit()
-    db.refresh(api_key)
+    await db.commit()
+    await db.refresh(api_key)
 
     return ApiKeyResponse(
         id=api_key.id,
@@ -54,23 +55,23 @@ def create_api_key(
 
 
 @router.get("", response_model=list[ApiKeyResponse])
-def list_api_keys(
+async def list_api_keys(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> list[ApiKeyResponse]:
     """List all active API keys for the workspace."""
-    get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
 
-    keys = (
-        db.query(ApiKey)
-        .filter(
+    result = await db.execute(
+        select(ApiKey)
+        .where(
             ApiKey.workspace_id == workspace_id,
             ApiKey.revoked_at.is_(None),
         )
         .order_by(ApiKey.created_at.desc())
-        .all()
     )
+    keys = result.scalars().all()
     return [
         ApiKeyResponse(
             id=k.id,
@@ -87,26 +88,25 @@ def list_api_keys(
 
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_api_key(
+async def revoke_api_key(
     workspace_id: str,
     key_id: str,
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Revoke (soft-delete) an API key."""
-    get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
 
-    api_key = (
-        db.query(ApiKey)
-        .filter(
+    result = await db.execute(
+        select(ApiKey).where(
             ApiKey.id == key_id,
             ApiKey.workspace_id == workspace_id,
             ApiKey.revoked_at.is_(None),
         )
-        .first()
     )
+    api_key = result.scalars().first()
     if api_key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
 
     api_key.revoked_at = datetime.now(timezone.utc)
-    db.commit()
+    await db.commit()

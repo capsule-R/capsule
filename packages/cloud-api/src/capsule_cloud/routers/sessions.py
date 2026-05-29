@@ -12,7 +12,8 @@ import ulid
 import zstandard as zstd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy.orm import Session as DBSession
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.auth import authenticate_api_key, get_current_user, get_workspace_member
 from capsule_cloud.config import get_settings
@@ -34,39 +35,42 @@ _PLAN_MAX_UPLOAD = {
 }
 
 
-def _get_workspace_or_404(workspace_id: str, db: DBSession) -> Workspace:
-    ws = db.query(Workspace).filter(
-        Workspace.id == workspace_id, Workspace.deleted_at.is_(None)
-    ).first()
+async def _get_workspace_or_404(workspace_id: str, db: AsyncSession) -> Workspace:
+    result = await db.execute(
+        select(Workspace).where(
+            Workspace.id == workspace_id, Workspace.deleted_at.is_(None)
+        )
+    )
+    ws = result.scalars().first()
     if ws is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
     return ws
 
 
-def _resolve_user_and_workspace(
+async def _resolve_user_and_workspace(
     workspace_id: str,
     credentials_header: str | None,
-    db: DBSession,
+    db: AsyncSession,
     current_user: User | None,
 ) -> tuple[User, Workspace]:
     """Accept either JWT user or API-key user."""
-    ws = _get_workspace_or_404(workspace_id, db)
+    ws = await _get_workspace_or_404(workspace_id, db)
     return current_user, ws  # type: ignore[return-value]
 
 
 # ── Upload ────────────────────────────────────────────────────
 
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
-def upload_session(
+async def upload_session(
     workspace_id: str,
     file: UploadFile = File(..., description=".capsule archive"),
     metadata: str = Form(..., description="JSON-encoded SessionUploadMetadata"),
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> CloudSession:
     """Upload a `.capsule` file and register the session in the cloud."""
-    ws = _get_workspace_or_404(workspace_id, db)
-    get_workspace_member(workspace_id, current_user, db)
+    ws = await _get_workspace_or_404(workspace_id, db)
+    await get_workspace_member(workspace_id, current_user, db)
 
     # Parse metadata
     try:
@@ -77,7 +81,7 @@ def upload_session(
             detail=f"Invalid metadata JSON: {exc}",
         )
 
-    raw = file.file.read()
+    raw = await file.read()
     file_size = len(raw)
 
     # Enforce upload size limit based on plan
@@ -163,7 +167,10 @@ def upload_session(
     )
 
     # Check for duplicate
-    existing = db.query(CloudSession).filter(CloudSession.id == meta.session_id).first()
+    result = await db.execute(
+        select(CloudSession).where(CloudSession.id == meta.session_id)
+    )
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -172,8 +179,8 @@ def upload_session(
 
     db.add(cloud_session)
     ws.storage_used_bytes += file_size
-    db.commit()
-    db.refresh(cloud_session)
+    await db.commit()
+    await db.refresh(cloud_session)
 
     # Attach computed fields
     cloud_session.tags = meta.tags  # type: ignore[attr-defined]
@@ -183,38 +190,44 @@ def upload_session(
 # ── List ──────────────────────────────────────────────────────
 
 @router.get("", response_model=SessionListResponse)
-def list_sessions(
+async def list_sessions(
     workspace_id: str,
     limit: int = 20,
     cursor: str | None = None,
     agent_name: str | None = None,
     status: str | None = None,
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> SessionListResponse:
-    get_workspace_member(workspace_id, current_user, db)
+    await get_workspace_member(workspace_id, current_user, db)
 
-    query = db.query(CloudSession).filter(
+    query = select(CloudSession).where(
         CloudSession.workspace_id == workspace_id,
         CloudSession.deleted_at.is_(None),
     )
     if agent_name:
-        query = query.filter(CloudSession.agent_name == agent_name)
+        query = query.where(CloudSession.agent_name == agent_name)
     if status:
-        query = query.filter(CloudSession.status == status)
+        query = query.where(CloudSession.status == status)
 
-    total = query.count()
+    # Get total count
+    count_result = await db.execute(
+        select(func.count()).select_from(query.subquery())
+    )
+    total = count_result.scalar() or 0
+
     query = query.order_by(CloudSession.uploaded_at.desc())
 
     if cursor:
         # cursor is the uploaded_at of the last seen item (ISO format)
         try:
             cursor_dt = datetime.fromisoformat(cursor)
-            query = query.filter(CloudSession.uploaded_at < cursor_dt)
+            query = query.where(CloudSession.uploaded_at < cursor_dt)
         except ValueError:
             pass
 
-    items = query.limit(limit).all()
+    result = await db.execute(query.limit(limit))
+    items = list(result.scalars().all())
 
     # Materialise tags from JSON
     for item in items:
@@ -237,14 +250,14 @@ def list_sessions(
 # ── Get ───────────────────────────────────────────────────────
 
 @router.get("/{session_id}", response_model=SessionResponse)
-def get_session(
+async def get_session(
     workspace_id: str,
     session_id: str,
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> SessionResponse:
-    get_workspace_member(workspace_id, current_user, db)
-    session = _get_session_or_404(workspace_id, session_id, db)
+    await get_workspace_member(workspace_id, current_user, db)
+    session = await _get_session_or_404(workspace_id, session_id, db)
     try:
         session.tags = json.loads(session.tags_json)  # type: ignore[attr-defined]
     except Exception:
@@ -255,30 +268,34 @@ def get_session(
 # ── Delete ────────────────────────────────────────────────────
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_session(
+async def delete_session(
     workspace_id: str,
     session_id: str,
     current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
-    get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin", "member"])
-    session = _get_session_or_404(workspace_id, session_id, db)
+    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin", "member"])
+    session = await _get_session_or_404(workspace_id, session_id, db)
     session.deleted_at = datetime.now(timezone.utc)
     # reclaim storage
-    ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    ws = result.scalars().first()
     if ws:
         ws.storage_used_bytes = max(0, ws.storage_used_bytes - session.storage_size_bytes)
-    db.commit()
+    await db.commit()
 
 
 # ── Helpers ───────────────────────────────────────────────────
 
-def _get_session_or_404(workspace_id: str, session_id: str, db: DBSession) -> CloudSession:
-    session = db.query(CloudSession).filter(
-        CloudSession.id == session_id,
-        CloudSession.workspace_id == workspace_id,
-        CloudSession.deleted_at.is_(None),
-    ).first()
+async def _get_session_or_404(workspace_id: str, session_id: str, db: AsyncSession) -> CloudSession:
+    result = await db.execute(
+        select(CloudSession).where(
+            CloudSession.id == session_id,
+            CloudSession.workspace_id == workspace_id,
+            CloudSession.deleted_at.is_(None),
+        )
+    )
+    session = result.scalars().first()
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     return session

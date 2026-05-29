@@ -11,7 +11,8 @@ from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session as DBSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
@@ -121,9 +122,9 @@ def _decode_token(token: str, expected_type: str) -> str:
 _bearer = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """Authenticate request via JWT Bearer token."""
     if credentials is None:
@@ -133,41 +134,46 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     user_id = _decode_token(credentials.credentials, _ACCESS_TOKEN_TYPE)
-    user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalars().first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
 
-def get_current_user_from_refresh(
+async def get_current_user_from_refresh(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """Authenticate request via Refresh token (for the /auth/refresh endpoint)."""
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     user_id = _decode_token(credentials.credentials, _REFRESH_TOKEN_TYPE)
-    user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalars().first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
 
-def get_workspace_member(
+async def get_workspace_member(
     workspace_id: str,
     current_user: User,
-    db: DBSession,
+    db: AsyncSession,
     required_roles: list[str] | None = None,
 ) -> WorkspaceMember:
     """Return the WorkspaceMember row; raises 403/404 if not found or wrong role."""
-    member = (
-        db.query(WorkspaceMember)
-        .filter(
+    result = await db.execute(
+        select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id,
             WorkspaceMember.user_id == current_user.id,
         )
-        .first()
     )
+    member = result.scalars().first()
     if member is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
     if required_roles and member.role not in required_roles:
@@ -175,32 +181,44 @@ def get_workspace_member(
     return member
 
 
-def authenticate_api_key(
+async def authenticate_api_key(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
-    db: DBSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> tuple[User, ApiKey]:
     """Authenticate via API key. Returns (user, api_key) tuple."""
     if credentials is None or not credentials.credentials.startswith("csk_"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
     key_hash = hash_api_key(credentials.credentials)
     now = datetime.now(timezone.utc)
-    api_key = (
-        db.query(ApiKey)
-        .filter(
+    result = await db.execute(
+        select(ApiKey).where(
             ApiKey.key_hash == key_hash,
             ApiKey.revoked_at.is_(None),
             (ApiKey.expires_at.is_(None)) | (ApiKey.expires_at > now),
         )
-        .first()
     )
+    api_key = result.scalars().first()
     if api_key is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired API key")
     # update last_used_at
     api_key.last_used_at = now
-    db.commit()
-    workspace = api_key.workspace
+    await db.commit()
+
+    # Fetch workspace to get owner_id
+    from capsule_cloud.models import Workspace
+
+    ws_result = await db.execute(
+        select(Workspace).where(Workspace.id == api_key.workspace_id)
+    )
+    workspace = ws_result.scalars().first()
+    if workspace is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key workspace not found")
+
     # Return the owner as the "user" for API key auth
-    user = db.query(User).filter(User.id == workspace.owner_id).first()
+    user_result = await db.execute(
+        select(User).where(User.id == workspace.owner_id)
+    )
+    user = user_result.scalars().first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key owner not found")
     return user, api_key
