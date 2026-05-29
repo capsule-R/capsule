@@ -29,6 +29,8 @@ export default function SignupPage() {
   const [emailErr, setEmailErr] = useState(false);
   const [passErr, setPassErr] = useState(false);
   const [termsErr, setTermsErr] = useState(false);
+  const [authErr, setAuthErr] = useState('');
+  const [successMsg, setSuccessMsg] = useState(false);
 
   const score = passwordScore(password);
 
@@ -42,6 +44,7 @@ export default function SignupPage() {
     setEmailErr(!eOk);
     setPassErr(!pOk);
     setTermsErr(!tOk);
+    setAuthErr('');
     if (!nOk || !eOk || !pOk || !tOk) return;
     
     setLoading(true);
@@ -49,7 +52,7 @@ export default function SignupPage() {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -61,9 +64,13 @@ export default function SignupPage() {
 
     if (error) {
       setLoading(false);
-      setEmailErr(true);
-      // Displaying or handling the actual error is good practice
-      console.error(error);
+      setAuthErr(error.message);
+      return;
+    }
+
+    if (!data.session) {
+      setLoading(false);
+      setSuccessMsg(true);
       return;
     }
 
@@ -87,9 +94,23 @@ export default function SignupPage() {
           <h1>Start capturing.</h1>
           <p className="sub">Create a free account — 1,000 captured sessions / month, no card required.</p>
 
-          <form className="auth-fields" onSubmit={handleSubmit} noValidate>
-            <div className={`field${nameErr ? ' show-err' : ''}`}>
-              <label htmlFor="name">Full name</label>
+          {successMsg ? (
+            <div style={{ background: 'rgba(0, 255, 128, 0.1)', border: '1px solid rgba(0, 255, 128, 0.2)', padding: '24px', borderRadius: 8, marginTop: 24 }}>
+              <h3 style={{ color: 'var(--success)', marginBottom: 8 }}>Check your email</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>
+                We sent a verification link to <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>. Please click the link to confirm your account and sign in.
+              </p>
+            </div>
+          ) : (
+            <>
+              <form className="auth-fields" onSubmit={handleSubmit} noValidate>
+                {authErr && (
+                  <div style={{ color: 'var(--error)', fontSize: 14, marginBottom: 16, padding: '12px 16px', background: 'rgba(255, 60, 60, 0.1)', borderRadius: 6, border: '1px solid rgba(255, 60, 60, 0.2)' }}>
+                    {authErr}
+                  </div>
+                )}
+                <div className={`field${nameErr ? ' show-err' : ''}`}>
+                  <label htmlFor="name">Full name</label>
               <input
                 className="input"
                 type="text"
@@ -205,6 +226,8 @@ export default function SignupPage() {
           <p className="auth-foot">
             Already have an account? <Link href="/login">Log in</Link>
           </p>
+          </>
+          )}
         </div>
 
         <div className="auth-legal">

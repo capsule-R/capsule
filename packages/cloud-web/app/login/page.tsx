@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [emailErr, setEmailErr] = useState(false);
   const [passErr, setPassErr] = useState(false);
+  const [authErr, setAuthErr] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,6 +20,7 @@ export default function LoginPage() {
     const passOk = password.length > 0;
     setEmailErr(!emailOk);
     setPassErr(!passOk);
+    setAuthErr('');
     if (!emailOk || !passOk) return;
     
     setLoading(true);
@@ -33,9 +35,7 @@ export default function LoginPage() {
 
     if (error) {
       setLoading(false);
-      setPassErr(true);
-      // You might want to display the actual error message here
-      console.error(error);
+      setAuthErr(error.message);
       return;
     }
     
@@ -59,6 +59,11 @@ export default function LoginPage() {
           <p className="sub">Log in to replay, branch, and debug your agent sessions.</p>
 
           <form className="auth-fields" onSubmit={handleSubmit} noValidate>
+            {authErr && (
+              <div style={{ color: 'var(--error)', fontSize: 14, marginBottom: 16, padding: '12px 16px', background: 'rgba(255, 60, 60, 0.1)', borderRadius: 6, border: '1px solid rgba(255, 60, 60, 0.2)' }}>
+                {authErr}
+              </div>
+            )}
             <div className={`field${emailErr ? ' show-err' : ''}`}>
               <label htmlFor="email">Work email</label>
               <input
