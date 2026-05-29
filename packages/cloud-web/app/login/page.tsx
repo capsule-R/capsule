@@ -13,15 +13,33 @@ export default function LoginPage() {
   const [emailErr, setEmailErr] = useState(false);
   const [passErr, setPassErr] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
     const passOk = password.length > 0;
     setEmailErr(!emailOk);
     setPassErr(!passOk);
     if (!emailOk || !passOk) return;
+    
     setLoading(true);
-    setTimeout(() => { window.location.href = '/dashboard'; }, 650);
+    
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setLoading(false);
+      setPassErr(true);
+      // You might want to display the actual error message here
+      console.error(error);
+      return;
+    }
+    
+    window.location.href = '/dashboard';
   };
 
   return (

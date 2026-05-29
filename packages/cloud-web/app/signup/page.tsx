@@ -32,7 +32,7 @@ export default function SignupPage() {
 
   const score = passwordScore(password);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const nOk = name.trim().length > 1;
     const eOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
@@ -43,8 +43,32 @@ export default function SignupPage() {
     setPassErr(!pOk);
     setTermsErr(!tOk);
     if (!nOk || !eOk || !pOk || !tOk) return;
+    
     setLoading(true);
-    setTimeout(() => { window.location.href = '/dashboard'; }, 700);
+    
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name,
+        },
+      },
+    });
+
+    if (error) {
+      setLoading(false);
+      setEmailErr(true);
+      // Displaying or handling the actual error is good practice
+      console.error(error);
+      return;
+    }
+
+    // Automatically redirect to dashboard (Supabase will log them in if email confirmation is off)
+    window.location.href = '/dashboard';
   };
 
   return (

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { DashboardShell } from '@/components/DashboardShell';
+import { createClient } from '@/lib/supabase/client';
 
 const PROJECTS: [string, string][] = [
   ['checkout-agent', 'var(--accent)'],
@@ -11,34 +12,15 @@ const PROJECTS: [string, string][] = [
   ['contract-review', 'var(--success)'],
 ];
 const MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-3.7'];
-const STATUSES: [string, string][] = [['ok','completed'],['ok','completed'],['ok','completed'],['err','failed'],['replay','replayed']];
-
-function rng(seed: number) {
-  let s = seed;
-  return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-}
 
 interface Session {
   id: string; st: [string, string]; proj: [string, string];
   model: string; steps: number; dur: string; cost: string; when: string; costN: number;
 }
 
-const r = rng(42);
-const HEX = '0123456789abcdef';
-const ALL_SESSIONS: Session[] = Array.from({ length: 47 }, (_, i) => {
-  const id = 'sess_' + Array.from({ length: 8 }, () => HEX[Math.floor(r() * 16)]).join('');
-  const st = STATUSES[Math.floor(r() * STATUSES.length)];
-  const proj = PROJECTS[Math.floor(r() * PROJECTS.length)];
-  const model = MODELS[Math.floor(r() * MODELS.length)];
-  const steps = 4 + Math.floor(r() * 14);
-  const dur = st[0] === 'err' && r() > 0.6 ? `${(20 + r() * 12).toFixed(1)}s` : `${(1 + r() * 7).toFixed(1)}s`;
-  const cost = `$${(0.002 + r() * 0.04).toFixed(4)}`;
-  const mins = i * 7 + Math.floor(r() * 6);
-  const when = mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
-  return { id, st, proj, model, steps, dur, cost, when, costN: parseFloat(cost.slice(1)) };
-});
-
 export default function SessionsPage() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('all');
   const [model, setModel] = useState('');
   const [dateRange, setDateRange] = useState('30d');
@@ -46,12 +28,61 @@ export default function SessionsPage() {
   const [page, setPage] = useState(1);
   const PER = 10;
 
-  const filtered = useMemo(() => ALL_SESSIONS.filter((s) => {
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const supabase = createClient();
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        const token = authSession?.access_token;
+        if (!token) return;
+
+        const headers = { Authorization: `Bearer ${token}` };
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+        const wsRes = await fetch(`${apiUrl}/workspaces`, { headers });
+        if (!wsRes.ok) throw new Error('Failed to fetch workspaces');
+        const workspaces = await wsRes.json();
+        
+        if (workspaces.length === 0) {
+          setLoading(false);
+          return;
+        }
+        
+        const wsId = workspaces[0].id;
+        const sessionsRes = await fetch(`${apiUrl}/workspaces/${wsId}/sessions?limit=100`, { headers });
+        if (!sessionsRes.ok) throw new Error('Failed to fetch sessions');
+        
+        const sessionsData = await sessionsRes.json();
+        
+        // Map backend format to frontend format
+        const mapped: Session[] = sessionsData.items.map((s: any) => ({
+          id: s.id,
+          st: s.status === 'completed' ? ['ok', 'completed'] : ['err', 'failed'],
+          proj: ['checkout-agent', 'var(--accent)'], // Mock project for now
+          model: s.agent_name || 'gpt-4o',
+          steps: s.step_count || 0,
+          dur: s.duration_ms ? `${(s.duration_ms / 1000).toFixed(1)}s` : '—',
+          cost: '$0.0000',
+          when: new Date(s.uploaded_at).toLocaleDateString(),
+          costN: 0
+        }));
+        
+        setSessions(mapped);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const filtered = useMemo(() => sessions.filter((s) => {
     if (status !== 'all' && s.st[0] !== status) return false;
     if (model && s.model !== model) return false;
     if (q && !s.id.includes(q)) return false;
     return true;
-  }), [status, model, q]);
+  }), [status, model, q, sessions]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER));
   const slice = filtered.slice((page - 1) * PER, page * PER);

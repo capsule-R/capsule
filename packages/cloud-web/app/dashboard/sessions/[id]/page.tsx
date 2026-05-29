@@ -24,80 +24,6 @@ interface Detail {
 }
 
 /* ─── Mock data ─────────────────────────────────────────────── */
-const STEPS: Step[] = [
-  {
-    idx: 0, kind: 'llm', label: 'LLM · plan', sub: 'gpt-4o', status: 'ok', dur: '0.4s', tokens: '312 tok',
-    detail: {
-      title: 'LLM call — planning phase',
-      meta: [{ k: 'Model', v: 'gpt-4o' }, { k: 'Temperature', v: '0.2' }, { k: 'Tokens in', v: '240' }, { k: 'Tokens out', v: '72' }],
-      input: `You are a checkout agent. The user has requested a refund for order #8821.\n\nDetermine the steps needed to process this refund and respond with a plan.`,
-      output: `1. Look up order #8821 in the database\n2. Verify refund eligibility window\n3. Check payment method on file\n4. Process refund via Stripe\n5. Send confirmation email`,
-    },
-  },
-  {
-    idx: 1, kind: 'tool', label: 'tool · web.search', sub: 'SerpAPI', status: 'ok', dur: '0.9s',
-    detail: {
-      title: 'Tool call — web.search',
-      meta: [{ k: 'Tool', v: 'web.search' }, { k: 'Provider', v: 'SerpAPI' }, { k: 'Latency', v: '882ms' }],
-      input: `{ "query": "stripe refund policy standard timeline" }`,
-      output: `{ "results": [{ "title": "Stripe refund processing times", "snippet": "Standard refunds take 5-10 business days..." }] }`,
-    },
-  },
-  {
-    idx: 2, kind: 'memory', label: 'memory · write', sub: 'context store', status: 'ok', dur: '0.1s',
-    detail: {
-      title: 'Memory write — context store',
-      meta: [{ k: 'Store', v: 'session-context' }, { k: 'Key', v: 'refund_policy' }, { k: 'TTL', v: '3600s' }],
-      input: `{ "refund_policy": "5-10 business days", "source": "stripe.com" }`,
-      output: `{ "ok": true, "key": "refund_policy" }`,
-    },
-  },
-  {
-    idx: 3, kind: 'llm', label: 'LLM · synthesize', sub: 'gpt-4o', status: 'ok', dur: '0.6s', tokens: '548 tok',
-    detail: {
-      title: 'LLM call — synthesize query',
-      meta: [{ k: 'Model', v: 'gpt-4o' }, { k: 'Temperature', v: '0.1' }, { k: 'Tokens in', v: '410' }, { k: 'Tokens out', v: '138' }],
-      input: `Given refund policy and order details, produce the SQL query to fetch order #8821 from the orders database.`,
-      output: `SELECT o.*, u.email, p.stripe_customer_id\nFROM orders o\nJOIN users u ON o.user_id = u.id\nJOIN payment_methods p ON u.id = p.user_id\nWHERE o.id = 8821 AND o.status = 'completed';`,
-    },
-  },
-  {
-    idx: 4, kind: 'tool', label: 'tool · db.query', sub: 'PostgreSQL', status: 'err', dur: '0.2s',
-    detail: {
-      title: 'Tool call — db.query',
-      meta: [{ k: 'Tool', v: 'db.query' }, { k: 'Database', v: 'postgres/prod' }, { k: 'Latency', v: '180ms' }],
-      input: `SELECT o.*, u.email, p.stripe_customer_id\nFROM orders o\nJOIN users u ON o.user_id = u.id\nJOIN payment_methods p ON u.id = p.user_id\nWHERE o.id = 8821 AND o.status = 'completed';`,
-      error: `ERROR: column "refund_window" does not exist\nLINE 1: SELECT o.*, refund_window FROM orders o ...\nHINT: Did you mean to reference the column "orders.created_at"?`,
-    },
-  },
-  {
-    idx: 5, kind: 'branch', label: 'branch · fix-schema', sub: 'manual branch', status: 'info', dur: '—',
-    detail: {
-      title: 'Branch point — fix-schema',
-      meta: [{ k: 'Branch ID', v: 'br_9a2f1c' }, { k: 'Created', v: '3 days ago' }, { k: 'Author', v: 'dana@helix.ai' }],
-      input: `Branch created at step 4 (db.query error). Objective: fix the schema reference and retry.`,
-      output: `Branch "fix-schema" diverges here. 2 replays run.`,
-    },
-  },
-  {
-    idx: 6, kind: 'llm', label: 'LLM · recover', sub: 'gpt-4o', status: 'ok', dur: '0.5s', tokens: '401 tok',
-    detail: {
-      title: 'LLM call — error recovery',
-      meta: [{ k: 'Model', v: 'gpt-4o' }, { k: 'Temperature', v: '0.1' }, { k: 'Tokens in', v: '320' }, { k: 'Tokens out', v: '81' }],
-      input: `The db.query step failed with: column "refund_window" does not exist. Rewrite the query without that column.`,
-      output: `SELECT o.id, o.created_at, o.total_cents, o.status, u.email, p.stripe_customer_id\nFROM orders o\nJOIN users u ON o.user_id = u.id\nJOIN payment_methods p ON u.id = p.user_id\nWHERE o.id = 8821;`,
-    },
-  },
-  {
-    idx: 7, kind: 'session', label: 'session · complete', sub: 'terminal', status: 'ok', dur: '—',
-    detail: {
-      title: 'Session completed',
-      meta: [{ k: 'Total steps', v: '8' }, { k: 'Total duration', v: '3.4s' }, { k: 'Total cost', v: '$0.0171' }, { k: 'Exit code', v: '0' }],
-      output: `Session ended with status: completed\nRefund processed successfully for order #8821.`,
-    },
-  },
-];
-
 const KIND_COLOR: Record<string, string> = {
   llm: 'var(--accent)',
   tool: 'var(--warn)',
@@ -253,19 +179,86 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
 }
 
 /* ─── Page ───────────────────────────────────────────────────── */
+import { createClient } from '@/lib/supabase/client';
+
 export default function SessionDetailPage({ params }: { params: { id: string } }) {
   const sessionId = params.id ?? 'sess_8f2a91c4';
-  const [active, setActive] = useState(4); // start on the error step
+  const [STEPS, setSteps] = useState<Step[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const supabase = createClient();
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        const token = authSession?.access_token;
+        if (!token) return;
+
+        const headers = { Authorization: `Bearer ${token}` };
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+        // Fetch workspace
+        const wsRes = await fetch(`${apiUrl}/workspaces`, { headers });
+        if (!wsRes.ok) throw new Error('Failed to fetch workspaces');
+        const workspaces = await wsRes.json();
+        if (workspaces.length === 0) throw new Error('No workspace found');
+        const wsId = workspaces[0].id;
+
+        // Fetch events
+        const eventsRes = await fetch(`${apiUrl}/workspaces/${wsId}/sessions/${sessionId}/events`, { headers });
+        if (!eventsRes.ok) throw new Error('Failed to fetch session events or no capsule binary found');
+        
+        const eventsData = await eventsRes.json();
+        
+        // Map backend event format to frontend Step format
+        const mappedSteps: Step[] = eventsData.map((e: any, idx: number) => {
+          // The backend returns the raw JSON of the capsule event model
+          const kind = e.event_type || 'llm';
+          const title = e.name || `${kind} call`;
+          return {
+            idx,
+            kind: kind === 'llm_call' ? 'llm' : kind === 'tool_call' ? 'tool' : 'session',
+            label: `${kind} · ${e.name || 'step'}`,
+            sub: e.model || e.tool_name || '',
+            status: e.status === 'error' ? 'err' : 'ok',
+            dur: e.duration_ms ? `${(e.duration_ms / 1000).toFixed(1)}s` : '—',
+            detail: {
+              title,
+              meta: [],
+              input: e.input_str || JSON.stringify(e.input_data, null, 2),
+              output: e.output_str || JSON.stringify(e.output_data, null, 2),
+              error: e.error_message,
+            }
+          };
+        });
+        
+        setSteps(mappedSteps);
+        // Default to the first error step, or the last step if no errors
+        const errIndex = mappedSteps.findIndex(s => s.status === 'err');
+        setActive(errIndex >= 0 ? errIndex : Math.max(0, mappedSteps.length - 1));
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [sessionId]);
+
   const step = STEPS[active];
 
   const play = useCallback(() => {
+    if (STEPS.length === 0) return;
     if (active >= STEPS.length - 1) { setActive(0); }
     setPlaying(true);
-  }, [active]);
+  }, [active, STEPS.length]);
 
   const pause = useCallback(() => {
     setPlaying(false);
@@ -288,6 +281,16 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [playing, speed]);
+
+  if (loading || STEPS.length === 0) {
+    return (
+      <DashboardShell active="sessions" title="Session" crumb={`workspace / sessions / ${sessionId}`}>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          {error ? `Error: ${error}` : 'Loading session events...'}
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell active="sessions" title="Session" crumb={`workspace / sessions / ${sessionId}`}>

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { updateSession } from '@/lib/supabase/middleware';
 
 const PUBLIC_PATHS = ['/', '/login', '/signup'];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow all public routes and static files through
@@ -15,19 +16,16 @@ export function middleware(request: NextRequest) {
 
   if (isPublic) return NextResponse.next();
 
-  // Dashboard routes: check for session token
-  // In production this would verify a real JWT; for now we check a simple cookie
-  const token =
-    request.cookies.get('capsule_session')?.value ||
-    request.cookies.get('capsule_token')?.value;
+  // Dashboard routes: verify Supabase JWT
+  const { supabaseResponse, user } = await updateSession(request);
 
-  if (!token) {
+  if (!user) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return supabaseResponse;
 }
 
 export const config = {

@@ -1,7 +1,7 @@
 # Capsule — Technical Requirements Document (TRD)
 
 **Project:** Capsule — Deterministic Replay & Time-Travel Debugger for AI Agents
-**Document Version:** 1.2
+**Document Version:** 1.5
 **Date:** May 2026
 **Audience:** AI Coding Agent (Implementation)
 **Document Type:** Production-Grade Technical Blueprint
@@ -12,6 +12,9 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5 | May 2026 | Section 19: Design system replaced. Signal palette → Monochrome Premium. Rationale: Signal read as generic AI startup; new direction is premium/enterprise-grade closer to Linear/Vercel. Oxanium and Space Grotesk removed. Inter + Fragment Mono only. All in-document CSS token references updated. |
+| 1.4 | May 2026 | Removed fixed domain ownership per founder. Both founders work across full stack based on availability. |
+| 1.3 | May 2026 | Co-founder Ojasvin Yadav added. Team section added to Section 1. Section 20.7 open questions updated. YC application answers updated for two-founder story. |
 | 1.2 | May 2026 | Section 19: Logo direction locked — Concept A (Signal Pill) confirmed. All TBD/pending logo references resolved. |
 | 1.1 | May 2026 | Section 17: Removed week-based timeline; sprint-only format. Section 19: Full rebrand to Signal palette aligned with logo. Section 7 & 13: All infrastructure defaults to free tiers; paid tools introduced only after visible revenue growth. |
 | 1.0 | May 2026 | Initial document. |
@@ -72,6 +75,23 @@ When an AI agent fails in production (deletes wrong data, sends wrong email, cha
 - **Phase 2 (Month 5):** Cloud platform live, 20 paying teams, ₹80,000+ MRR
 - **Phase 3 (Month 9):** First enterprise contract, SOC 2 process started, ₹3,00,000+ MRR
 - **Phase 4 (Month 18):** ₹10,00,000+ MRR (~₹1Cr ARR), YC application ready, 5-person team
+
+### 1.5 The Founding Team
+
+#### Founder 1
+- **Background:** Built and launched Revastra (thrift fashion marketplace, 200+ active users on launch). Strong Python, Java, C++, AI/ML training, server management, product management.
+- **Languages:** Python, Rust, Java, C++, TypeScript.
+- **Why this problem:** Found the debugging gap while building AI agents personally — no existing tool could replay a failure deterministically.
+
+#### Co-Founder — Ojasvin Yadav
+- **Education:** B.Tech CSE (AI & Machine Learning), SRM IST Kattankulathur, graduating 2027. CGPA 8.69/10.
+- **Technical background:** Built DecetraFi — a production-deployed full-stack Web3 decentralised crowdfunding platform on Ethereum Sepolia testnet using React, TypeScript, Tailwind CSS, Node.js, PostgreSQL, Solidity, Hardhat, and OpenZeppelin. Implemented smart contract escrow logic, MetaMask/WalletConnect auth, and automated security analysis with Slither and MythX (zero critical vulnerabilities pre-deployment). Co-built Revastra with Founder 1.
+- **Finance background:** Corporate finance and treasury intern at Acmegrade (Dec 2025–Feb 2026); Capital Market Analyst intern at Pipraisers (Oct–Nov 2025). Conducted equity, commodity, and forex market research. Holds JP Morgan Investment Banking (Forage) and Deloitte Data Analytics (Forage) certifications.
+- **Languages:** React, TypeScript, Tailwind CSS, Node.js, PostgreSQL, Python, Solidity.
+- **Strategic value:** Finance background maps directly to Capsule's primary enterprise buyers — fintech, insurance, and legal AI companies whose compliance teams are asking "how do we prove to the regulator what our AI did?"
+
+#### How the Team Works
+Tasks are divided based on availability and time, not fixed domains. Both founders work across the full stack — whoever is available picks up the next task. Both have shipped together before on Revastra and know how to work under pressure.
 
 ---
 
@@ -2261,54 +2281,57 @@ chore(deps): bump fastapi to 0.110.0
 
 ## 19. Theme & Brand System
 
-The **Signal** palette is the authoritative brand system for Capsule. It is designed around the logo concept: a pill/capsule shape containing a rewind arrow, in deep navy with indigo as the primary brand color. All UI components must use the CSS tokens defined below.
+The **Monochrome Premium** palette is the authoritative design system for Capsule. It replaces the previous Signal (indigo) palette.
 
-> **Logo status: LOCKED — Concept A (Signal Pill).** Horizontal indigo pill (`#6366F1`) containing a double left-pointing rewind arrow in white and a white cursor dot on the right. Full design spec in `Capsule_Logo_Brief_v1.0.md`. The SVG must be generated per that brief and committed to `packages/cloud-web/public/brand/logo.svg` during Sprint 1. Until the SVG is committed, use the wordmark (text-only) in Oxanium 700. Do not use placeholder icons from third-party libraries as the product logo.
+**Rationale for change:** The Signal palette read as a generic AI startup — indigo CTAs, glowing accents, cyan highlights. Every LLM observability tool in 2026 looks like that. The new direction is premium, minimal, and enterprise-grade — closer to Linear, Vercel, and Raycast than to AI tooling. No color. No gradients. Pure monochrome confidence.
+
+> **Logo status: LOCKED — Concept A (Signal Pill).** The logo mark retains its shape. The pill color updates from indigo `#6366F1` to white `#F5F5F5` on dark backgrounds (and black `#0A0A0A` on light backgrounds). Full spec in `Capsule_Logo_Brief_v1.0.md`. SVG must be regenerated to reflect the new palette and committed to `packages/cloud-web/public/brand/logo.svg` during Sprint 1.
 
 ### 19.1 Design Philosophy
 
-- **Dark-first:** The primary surface is deep navy (`--void`), not white. This is a developer tool — developers work in dark mode.
-- **Signal as accent:** Indigo (`--signal-500`) is the sole brand color for CTAs, highlights, and interactive states. Nothing competes with it.
-- **Cyan for action:** Replay-specific UI elements (the replay button, timeline playhead, live capture indicator) use `--replay` (cyan) to create a visual language around the product's core action.
-- **Monospace as texture:** Code, IDs, hex values, and timestamps use `Fragment Mono` or `Space Mono`. The monospace font is part of the brand aesthetic, not just a utility choice.
+- **Pure dark, no color:** The background is near-black (`#0A0A0A`). There are no color accents — no indigo, no cyan, no purple. Everything communicates through contrast, spacing, and typography.
+- **White is the accent:** The only "brand color" is white. CTAs, highlights, active states — all white on dark. This is intentional restraint.
+- **Monospace as identity:** `Fragment Mono` is the second typeface and carries as much brand weight as `Inter`. Every metric, timestamp, ID, and data point uses it. The monospace texture is what makes Capsule feel like a tool built by engineers for engineers.
+- **Enterprise premium:** The aesthetic signals that this is serious infrastructure, not a weekend project. Potential buyers in regulated industries — banks, insurance, legal AI — should feel that Capsule is as trustworthy as the systems they already run.
 
 ### 19.2 Color Tokens
 
 ```css
 :root {
-  /* ── BASE — dark surfaces ── */
-  --void:        #080B1A;  /* Page background, deepest surface */
-  --abyss:       #13152B;  /* Card backgrounds, panels */
-  --deep:        #1E2044;  /* Elevated surfaces, modals */
-  --surface:     #2D3060;  /* Borders, dividers, inactive states */
-  --ridge:       #3E4180;  /* Hover borders, subtle accents */
+  /* ── BACKGROUNDS ── */
+  --bg-base:        #0A0A0A;   /* Page background — true near-black */
+  --bg-card:        #111111;   /* Card backgrounds, sidebars */
+  --bg-elevated:    #1A1A1A;   /* Modals, dropdowns, popovers */
+  --bg-hover:       #222222;   /* Hover states on interactive elements */
 
-  /* ── SIGNAL — primary brand (indigo) ── */
-  --signal-700:  #4F46E5;  /* Pressed / active states */
-  --signal-500:  #6366F1;  /* Primary CTAs, links, focus rings */
-  --signal-400:  #818CF8;  /* Secondary accents, hover on dark */
-  --signal-300:  #A5B4FC;  /* Light accent on dark backgrounds */
-  --signal-100:  #E0E7FF;  /* Pill backgrounds, light badges */
+  /* ── BORDERS ── */
+  --border-subtle:  #1F1F1F;   /* Hairline dividers, table rows */
+  --border-default: #2A2A2A;   /* Card borders, input borders */
+  --border-strong:  #3A3A3A;   /* Hover borders, focus rings */
 
-  /* ── NEUTRAL ── */
-  --slate-600:   #475569;  /* Placeholder text */
-  --slate-500:   #64748B;  /* Tertiary text, icons */
-  --slate-400:   #94A3B8;  /* Secondary text */
-  --slate-200:   #CBD5E1;  /* Borders on light backgrounds */
-  --frost:       #F1F5F9;  /* Primary text on dark; light bg */
-  --white:       #FFFFFF;  /* Absolute white — used sparingly */
+  /* ── TEXT ── */
+  --text-primary:   #F5F5F5;   /* Headings, primary labels — main reading color */
+  --text-secondary: #A0A0A0;   /* Descriptions, secondary labels */
+  --text-tertiary:  #606060;   /* Placeholders, disabled, timestamps */
+  --text-inverse:   #0A0A0A;   /* Text on white/light backgrounds */
+
+  /* ── ACCENT (white only) ── */
+  --accent:         #F5F5F5;   /* Primary CTA background, active states */
+  --accent-hover:   #E0E0E0;   /* CTA hover state */
 
   /* ── SEMANTIC ── */
-  --success:     #10B981;  /* Replay successful, test pass */
-  --replay:      #06B6D4;  /* Replay action, live capture, playhead */
-  --warn:        #F59E0B;  /* Stale capsule, approaching limit */
-  --error:       #EF4444;  /* Agent failure, exception, test fail */
+  --success:  #22C55E;   /* Replay success, test pass, health OK */
+  --warn:     #F59E0B;   /* Stale capsule, approaching limit */
+  --error:    #EF4444;   /* Agent failure, exception, test fail */
+  --replay:   #E2E8F0;   /* Replay action elements — light grey, not cyan */
+
+  /* ── MONOSPACE SURFACE ── */
+  --mono-bg:   #141414;   /* Background behind code blocks, terminal output */
+  --mono-text: #D4D4D4;   /* Text inside code blocks */
 }
 ```
 
 ### 19.3 Tailwind CSS Token Mapping
-
-For components using Tailwind, map the CSS variables to custom theme tokens in `tailwind.config.ts`:
 
 ```typescript
 // tailwind.config.ts
@@ -2316,29 +2339,36 @@ export default {
   theme: {
     extend: {
       colors: {
-        void:    '#080B1A',
-        abyss:   '#13152B',
-        deep:    '#1E2044',
-        surface: '#2D3060',
-        ridge:   '#3E4180',
-        signal: {
-          700: '#4F46E5',
-          500: '#6366F1',
-          400: '#818CF8',
-          300: '#A5B4FC',
-          100: '#E0E7FF',
+        bg: {
+          base:     '#0A0A0A',
+          card:     '#111111',
+          elevated: '#1A1A1A',
+          hover:    '#222222',
         },
-        slate: {
-          600: '#475569',
-          500: '#64748B',
-          400: '#94A3B8',
-          200: '#CBD5E1',
+        border: {
+          subtle:   '#1F1F1F',
+          default:  '#2A2A2A',
+          strong:   '#3A3A3A',
         },
-        frost:   '#F1F5F9',
-        replay:  '#06B6D4',
-        success: '#10B981',
-        warn:    '#F59E0B',
-        error:   '#EF4444',
+        text: {
+          primary:   '#F5F5F5',
+          secondary: '#A0A0A0',
+          tertiary:  '#606060',
+          inverse:   '#0A0A0A',
+        },
+        accent:   '#F5F5F5',
+        success:  '#22C55E',
+        warn:     '#F59E0B',
+        error:    '#EF4444',
+        replay:   '#E2E8F0',
+        mono: {
+          bg:   '#141414',
+          text: '#D4D4D4',
+        },
+      },
+      fontFamily: {
+        sans:  ['Inter', 'system-ui', 'sans-serif'],
+        mono:  ['Fragment Mono', 'ui-monospace', 'monospace'],
       },
     },
   },
@@ -2347,105 +2377,177 @@ export default {
 
 ### 19.4 Typography
 
-| Role | Font | Weight | Notes |
-|------|------|--------|-------|
-| Display / hero | `Oxanium` | 700–800 | All-caps or title-case headings, logo wordmark |
-| UI headings | `Space Grotesk` | 600–700 | Section headers, card titles |
-| Body text | `Space Grotesk` | 400 | All prose, descriptions, labels |
-| Code / data / IDs | `Fragment Mono` | 400–500 | Timestamps, hex IDs, API keys, code blocks |
-| Monospace emphasis | `Space Mono` | 700 | Short codes, version strings, CLI commands |
+Two fonts only. No display font.
 
-All fonts are available on Google Fonts — zero cost. Load only the weights used.
+| Role | Font | Weight | Usage |
+|------|------|--------|-------|
+| All UI text, body, headings, buttons, labels | `Inter` | 400, 500, 600 | Everything except code and data |
+| Code, IDs, metrics, timestamps, hero data points | `Fragment Mono` | 400, 500 | Anything that is a number, hash, key, or machine-generated string |
+
+`Inter` is available on Google Fonts (free). `Fragment Mono` is available on Google Fonts (free).
+
+**Removed fonts:** Oxanium (too stylized, not enterprise), Space Grotesk (replaced by Inter), Space Mono (consolidated into Fragment Mono).
 
 ```html
 <link href="https://fonts.googleapis.com/css2?
-  family=Oxanium:wght@700;800&
-  family=Space+Grotesk:wght@400;600;700&
+  family=Inter:wght@400;500;600&
   family=Fragment+Mono:wght@400;500&
-  family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+  display=swap" rel="stylesheet">
+```
+
+**Typography scale:**
+
+```css
+/* Headings — Inter, no display font */
+.h1 { font-family: 'Inter', sans-serif; font-size: 32px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.5px; }
+.h2 { font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.3px; }
+.h3 { font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 500; color: var(--text-primary); }
+
+/* Body */
+.body { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 400; color: var(--text-secondary); line-height: 1.6; }
+
+/* Labels */
+.label { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.5px; text-transform: uppercase; }
+
+/* Monospace — data, IDs, metrics */
+.mono { font-family: 'Fragment Mono', monospace; font-size: 13px; font-weight: 400; color: var(--mono-text); }
+.mono-hero { font-family: 'Fragment Mono', monospace; font-size: 48px; font-weight: 500; color: var(--text-primary); }
 ```
 
 ### 19.5 Component Patterns
 
 ```css
-/* Cards */
+/* ── Cards ── */
 .card {
-  background: var(--abyss);
-  border: 1px solid var(--surface);
-  border-radius: 10px;
-  box-shadow: 0 2px 20px rgba(8, 11, 26, 0.4);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+}
+.card:hover {
+  border-color: var(--border-strong);
 }
 
-/* Primary button */
+/* ── Primary CTA (white button) ── */
 .btn-primary {
-  background: var(--signal-500);
-  color: var(--white);
+  background: var(--accent);          /* #F5F5F5 */
+  color: var(--text-inverse);         /* #0A0A0A */
+  border: none;
   border-radius: 6px;
-  font-family: 'Space Grotesk', sans-serif;
-  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  cursor: pointer;
 }
-.btn-primary:hover { background: var(--signal-700); }
+.btn-primary:hover {
+  background: var(--accent-hover);    /* #E0E0E0 */
+}
 
-/* Secondary button */
+/* ── Secondary / Ghost button ── */
 .btn-secondary {
   background: transparent;
-  border: 1px solid var(--surface);
-  color: var(--frost);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
 }
-.btn-secondary:hover { border-color: var(--signal-400); }
+.btn-secondary:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
 
-/* Replay action button (cyan) */
+/* ── Replay action button (light grey, not cyan) ── */
 .btn-replay {
-  background: var(--replay);
-  color: var(--void);
+  background: var(--bg-elevated);
+  color: var(--replay);               /* #E2E8F0 */
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  font-weight: 700;
-}
-
-/* Eyebrow label pattern */
-.eyebrow {
   font-family: 'Fragment Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 3px;
-  color: var(--signal-500);
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+}
+.btn-replay:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
 }
 
-/* Error state */
-.badge-error {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--error);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+/* ── Input fields ── */
+.input {
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  padding: 8px 12px;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+.input::placeholder {
+  color: var(--text-tertiary);
 }
 
-/* Success state */
-.badge-success {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--success);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+/* ── Code / terminal surfaces ── */
+.code-block {
+  background: var(--mono-bg);         /* #141414 */
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-family: 'Fragment Mono', monospace;
+  font-size: 13px;
+  color: var(--mono-text);            /* #D4D4D4 */
+  padding: 16px;
 }
+
+/* ── Status badges ── */
+.badge-success { background: rgba(34, 197, 94, 0.1);  color: var(--success); border: 1px solid rgba(34, 197, 94, 0.2);  border-radius: 4px; padding: 2px 8px; font-family: 'Fragment Mono', monospace; font-size: 11px; }
+.badge-error   { background: rgba(239, 68, 68, 0.1);  color: var(--error);   border: 1px solid rgba(239, 68, 68, 0.2);  border-radius: 4px; padding: 2px 8px; font-family: 'Fragment Mono', monospace; font-size: 11px; }
+.badge-warn    { background: rgba(245, 158, 11, 0.1); color: var(--warn);    border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 4px; padding: 2px 8px; font-family: 'Fragment Mono', monospace; font-size: 11px; }
+.badge-replay  { background: var(--bg-elevated);       color: var(--replay);  border: 1px solid var(--border-default);   border-radius: 4px; padding: 2px 8px; font-family: 'Fragment Mono', monospace; font-size: 11px; }
+
+/* ── Dividers ── */
+.divider { height: 1px; background: var(--border-subtle); border: none; }
+
+/* ── Focus ring (accessibility) ── */
+*:focus-visible { outline: 1px solid var(--border-strong); outline-offset: 2px; }
 ```
 
 ### 19.6 Logo & Brand Guidelines
 
-- **Logo wordmark font:** `Oxanium` 700, lowercase, `capsule` — the dot in the 'i' is replaced by the replay symbol in the final mark
-- **Logo mark (icon):** Concept A — horizontal indigo pill (`#6366F1`) with double left-pointing rewind triangles (white, white 45%) and a white cursor dot (60% opacity). Full spec in `Capsule_Logo_Brief_v1.0.md`. SVG committed to `packages/cloud-web/public/brand/logo.svg` in Sprint 1.
-- **Favicon:** 32×32 and 16×16 ICO + 512×512 PNG — the capsule mark only (no wordmark at small sizes)
+- **Logo mark:** Concept A — capsule/pill shape with double left-pointing rewind triangles and cursor dot
+- **Logo color on dark (`#0A0A0A`) backgrounds:** White pill (`#F5F5F5`), white triangles, white dot
+- **Logo color on light (`#F5F5F5`) backgrounds:** Black pill (`#0A0A0A`), black triangles, black dot
+- **Wordmark font:** `Inter` 600, lowercase `capsule` — replaces Oxanium
+- **Wordmark color:** `#F5F5F5` on dark, `#0A0A0A` on light
+- **No color version of the logo** — monochrome only, in all contexts
 - **Brand assets location:** `packages/cloud-web/public/brand/`
-- **Do not:** Stretch or recolor the logo. Do not use on backgrounds with insufficient contrast.
 - **Minimum size:** 24px height for the mark; 80px width for the full wordmark
 
-### 19.7 Accessibility
+### 19.7 What This Palette Does Not Allow
+
+These are hard rules. The AI coding agent must never violate them:
+
+- **No indigo, purple, cyan, or any color accent** on interactive elements — CTAs are white only
+- **No gradient fills** on any background or button
+- **No glow or shadow effects** except a single subtle `box-shadow: 0 1px 3px rgba(0,0,0,0.4)` for elevated surfaces
+- **No Oxanium or Space Grotesk** anywhere in the codebase — these fonts are fully removed
+- **No colored borders** — all borders are shades of grey from the token list above
+- **Semantic colors (success, warn, error, replay) are for status indicators only** — never for CTAs, headings, or decorative elements
+
+### 19.8 Accessibility
 
 - WCAG 2.1 Level AA compliance required
+- `--text-primary` (#F5F5F5) on `--bg-base` (#0A0A0A) = 18.1:1 contrast ratio ✓
+- `--text-secondary` (#A0A0A0) on `--bg-base` (#0A0A0A) = 5.7:1 contrast ratio ✓
+- `--text-tertiary` (#606060) on `--bg-base` (#0A0A0A) = 2.7:1 — **use only for decorative/non-essential text, never for required reading**
 - All interactive elements keyboard-navigable
-- Color contrast ratios: 4.5:1 minimum for text, 3:1 for UI components
-- Focus indicators visible on all interactive elements
-- Screen reader testing with NVDA (Windows) and VoiceOver (macOS)
-- Reduced motion respected (`prefers-reduced-motion`)
-
----
+- Focus indicators use `--border-strong` (#3A3A3A) — visible against dark backgrounds
+- `prefers-reduced-motion` respected
+- Screen reader testing: NVDA (Windows) and VoiceOver (macOS)
 
 ## 20. Appendix: Reference Materials
 
@@ -2524,11 +2626,13 @@ The following features are explicitly out of scope for the initial 18-month buil
 
 The AI coding agent should flag and request human input on:
 
-1. Final company name and legal entity structure (India Pvt Ltd vs Delaware LLC)
+1. Final company name and legal entity structure (India Pvt Ltd vs Delaware LLC) — decision pending
 2. Logo direction: **RESOLVED — Concept A (Signal Pill).** SVG generation is a Sprint 1 deliverable per `Capsule_Logo_Brief_v1.0.md`.
-3. Specific YC application timing
-4. Pricing tier names (we use placeholder names "Hobby", "Pro", "Business")
-5. Final domain name selection (capsule.dev vs capsulehq.com vs others)
+3. Specific YC application timing — apply when MRR ≥ ₹8L, growing 15%+ MoM for 3 months, 1,000+ GitHub stars
+4. Pricing tier names — current placeholders "Hobby", "Pro", "Business" are acceptable; change only if enterprise feedback suggests different naming
+5. Final domain name selection (capsule.dev vs capsulehq.com vs others) — decision pending
+6. Co-founder equity split between Founder 1 and Ojasvin Yadav — must be agreed and documented before company registration
+7. Sprint 6 start coordination — API contracts from Sprint 5 should be stable before the web UI build begins
 
 ---
 
@@ -2536,5 +2640,5 @@ The AI coding agent should flag and request human input on:
 
 For questions or clarifications during implementation, the AI coding agent should consult this document first. Where this document is silent or ambiguous, default to established best practices from the referenced sources and flag the question for human review.
 
-*Document prepared in accordance with the Signal design system (v1.1).*
-*Storage location: `~/Documents/Capsule Code/TRD-v1.2.md`*
+*Document prepared in accordance with the Monochrome Premium design system (v1.5).*
+*Storage location: `~/Documents/Capsule Code/TRD-v1.5.md`*

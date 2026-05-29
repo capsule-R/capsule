@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import create_tables
-from capsule_cloud.routers import api_keys, auth, sessions, workspaces
+from capsule_cloud.routers import api_keys, auth, sessions, workspaces, branches
 from capsule_cloud.schemas import HealthResponse, ProblemDetail
 
 logger = structlog.get_logger(__name__)
@@ -144,6 +144,7 @@ def create_app() -> FastAPI:
     app.include_router(workspaces.router, prefix=prefix)
     app.include_router(sessions.router, prefix=prefix)
     app.include_router(api_keys.router, prefix=prefix)
+    app.include_router(branches.router, prefix=prefix)
 
     return app
 

@@ -140,6 +140,13 @@ async def upload_session(
 
     # Storage path — in production this would be the R2/S3 object key
     storage_path = f"{workspace_id}/{meta.session_id}.capsule"
+    
+    # Save the file to local disk for development
+    import os
+    local_storage_dir = os.path.join(os.getcwd(), "data", "storage", workspace_id)
+    os.makedirs(local_storage_dir, exist_ok=True)
+    with open(os.path.join(local_storage_dir, f"{meta.session_id}.capsule"), "wb") as f:
+        f.write(raw)
 
     # Retention
     retention_days = ws.retention_days
@@ -284,6 +291,55 @@ async def delete_session(
         ws.storage_used_bytes = max(0, ws.storage_used_bytes - session.storage_size_bytes)
     await db.commit()
 
+
+# ── Events ────────────────────────────────────────────────────
+
+@router.get("/{session_id}/events", response_model=list[dict])
+async def get_session_events(
+    workspace_id: str,
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Retrieve all detailed events for a session directly from the .capsule archive."""
+    await get_workspace_member(workspace_id, current_user, db)
+    # Ensure session exists and is not deleted
+    await _get_session_or_404(workspace_id, session_id, db)
+    
+    import os
+    local_storage_dir = os.path.join(os.getcwd(), "data", "storage", workspace_id)
+    capsule_path = os.path.join(local_storage_dir, f"{session_id}.capsule")
+    
+    if not os.path.exists(capsule_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Session binary data not found on disk."
+        )
+        
+    try:
+        with open(capsule_path, "rb") as f:
+            raw = f.read()
+            
+        dctx = zstd.ZstdDecompressor()
+        raw_tar = dctx.decompress(raw)
+        
+        events = []
+        with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tar:
+            for member in tar.getmembers():
+                if member.name.startswith("events/") and member.name.endswith(".json"):
+                    extracted_file = tar.extractfile(member)
+                    if extracted_file:
+                        event_data = json.loads(extracted_file.read().decode("utf-8"))
+                        events.append((member.name, event_data))
+                        
+        # Sort by filename which contains the index (e.g. 0001-tool_call.json)
+        events.sort(key=lambda x: x[0])
+        return [e[1] for e in events]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to parse capsule archive: {str(e)}"
+        )
 
 # ── Helpers ───────────────────────────────────────────────────
 
