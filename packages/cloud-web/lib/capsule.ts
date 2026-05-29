@@ -24,12 +24,16 @@ function getCookie(name: string): string | null {
 }
 
 function setCookie(name: string, value: string, maxAgeSeconds: number): void {
+  // Add Secure flag on HTTPS (production). Omit on HTTP (local dev) so the
+  // cookie is still set — browsers silently drop Secure cookies on plain HTTP.
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
   document.cookie =
-    `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
+    `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax${secure}`;
 }
 
 function deleteCookie(name: string): void {
-  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${secure}`;
 }
 
 // ── Token management ──────────────────────────────────────────

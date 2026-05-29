@@ -1,4 +1,4 @@
-"""Authentication utilities — JWT tokens and API key management."""
+"""Authentication utilities — JWT (EdDSA/Ed25519) and API key management."""
 
 from __future__ import annotations
 
@@ -7,9 +7,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import jwt as pyjwt
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,8 +37,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 def generate_api_key() -> tuple[str, str, str]:
     """Returns (full_key, key_prefix, key_hash).
 
-    full_key  = 'csk_' + 48 url-safe random bytes (base64 ~ 64 chars)
-    key_prefix = first 12 chars (for display)
+    full_key   = 'csk_' + 48 url-safe random bytes (~64 chars)
+    key_prefix = first 12 chars (display only)
     key_hash   = SHA-256 hex of the full key (stored in DB)
     """
     raw = secrets.token_urlsafe(48)
@@ -51,10 +52,28 @@ def hash_api_key(full_key: str) -> str:
     return hashlib.sha256(full_key.encode()).hexdigest()
 
 
-# ── JWT ───────────────────────────────────────────────────────
+# ── JWT (EdDSA / Ed25519) ─────────────────────────────────────
+#
+# We use asymmetric EdDSA so:
+#   • Only the backend (holding the private key) can ISSUE tokens.
+#   • Any service holding only the public key can VERIFY tokens.
+#   • A leaked public key is harmless; a leaked secret_key (HS256) would
+#     compromise every token ever issued.
 
 _ACCESS_TOKEN_TYPE = "access"
 _REFRESH_TOKEN_TYPE = "refresh"
+
+
+def _get_private_key():
+    """Load the Ed25519 private key object (cached via get_settings singleton)."""
+    settings = get_settings()
+    return load_pem_private_key(settings.jwt_private_key.encode(), password=None)
+
+
+def _get_public_key():
+    """Load the Ed25519 public key object (cached via get_settings singleton)."""
+    settings = get_settings()
+    return load_pem_public_key(settings.jwt_public_key.encode())
 
 
 def _create_token(
@@ -62,7 +81,6 @@ def _create_token(
     token_type: str,
     expires_delta: timedelta,
 ) -> str:
-    settings = get_settings()
     payload = dict(data)
     now = datetime.now(timezone.utc)
     payload.update(
@@ -72,7 +90,7 @@ def _create_token(
             "type": token_type,
         }
     )
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    return pyjwt.encode(payload, _get_private_key(), algorithm="EdDSA")
 
 
 def create_access_token(user_id: str) -> str:
@@ -94,14 +112,22 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def _decode_token(token: str, expected_type: str) -> str:
-    """Decode a JWT and return the user_id (sub claim)."""
-    settings = get_settings()
+    """Decode an EdDSA JWT and return the user_id (sub claim)."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
-    except JWTError:
+        payload = pyjwt.decode(
+            token,
+            _get_public_key(),
+            algorithms=["EdDSA"],
+        )
+    except pyjwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Token has expired",
+        )
+    except pyjwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
         )
     if payload.get("type") != expected_type:
         raise HTTPException(
@@ -200,13 +226,10 @@ async def authenticate_api_key(
     api_key = result.scalars().first()
     if api_key is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired API key")
-    # update last_used_at
     api_key.last_used_at = now
     await db.commit()
 
-    # Fetch workspace to get owner_id
     from capsule_cloud.models import Workspace
-
     ws_result = await db.execute(
         select(Workspace).where(Workspace.id == api_key.workspace_id)
     )
@@ -214,7 +237,6 @@ async def authenticate_api_key(
     if workspace is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key workspace not found")
 
-    # Return the owner as the "user" for API key auth
     user_result = await db.execute(
         select(User).where(User.id == workspace.owner_id)
     )

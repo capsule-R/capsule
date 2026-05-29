@@ -18,11 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from capsule_cloud.auth import authenticate_api_key, get_current_user, get_workspace_member
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
+from capsule_cloud import storage as _storage
 from capsule_cloud.models import ApiKey, Session as CloudSession, User, Workspace
 from capsule_cloud.schemas import (
+    ReplayResponse,
     SessionListResponse,
     SessionResponse,
     SessionUploadMetadata,
+    TriggerReplayRequest,
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/sessions", tags=["sessions"])
@@ -138,15 +141,9 @@ async def upload_session(
     error_type = session_json.get("error_type")
     error_message = session_json.get("error_message")
 
-    # Storage path — in production this would be the R2/S3 object key
+    # Object storage key — same path on both local disk fallback and B2/R2
     storage_path = f"{workspace_id}/{meta.session_id}.capsule"
-    
-    # Save the file to local disk for development
-    import os
-    local_storage_dir = os.path.join(os.getcwd(), "data", "storage", workspace_id)
-    os.makedirs(local_storage_dir, exist_ok=True)
-    with open(os.path.join(local_storage_dir, f"{meta.session_id}.capsule"), "wb") as f:
-        f.write(raw)
+    await _storage.upload(storage_path, raw)
 
     # Retention
     retention_days = ws.retention_days
@@ -303,23 +300,22 @@ async def get_session_events(
 ) -> list[dict]:
     """Retrieve all detailed events for a session directly from the .capsule archive."""
     await get_workspace_member(workspace_id, current_user, db)
-    # Ensure session exists and is not deleted
-    await _get_session_or_404(workspace_id, session_id, db)
-    
-    import os
-    local_storage_dir = os.path.join(os.getcwd(), "data", "storage", workspace_id)
-    capsule_path = os.path.join(local_storage_dir, f"{session_id}.capsule")
-    
-    if not os.path.exists(capsule_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Session binary data not found on disk."
-        )
-        
+    session = await _get_session_or_404(workspace_id, session_id, db)
+
     try:
-        with open(capsule_path, "rb") as f:
-            raw = f.read()
-            
+        raw = await _storage.download(session.storage_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session binary data not found in storage.",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Storage error: {exc}",
+        )
+
+    try:
         dctx = zstd.ZstdDecompressor()
         raw_tar = dctx.decompress(raw)
         
@@ -340,6 +336,67 @@ async def get_session_events(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to parse capsule archive: {str(e)}"
         )
+
+# ── Replay ───────────────────────────────────────────────────
+
+@router.post("/{session_id}/replay", response_model=ReplayResponse, status_code=status.HTTP_202_ACCEPTED)
+async def trigger_replay(
+    workspace_id: str,
+    session_id: str,
+    body: TriggerReplayRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ReplayResponse:
+    """Queue a remote replay of a session via Modal cloud execution.
+
+    Returns immediately with ``status: queued`` (or ``pending_modal_config``
+    when Modal credentials are not set). The actual replay runs asynchronously
+    in a Modal sandbox — check the Modal dashboard for execution logs.
+    """
+    await get_workspace_member(workspace_id, current_user, db)
+    session = await _get_session_or_404(workspace_id, session_id, db)
+
+    replay_id = str(ulid.new())
+    settings = get_settings()
+
+    if settings.modal_token_id and settings.modal_token_secret:
+        try:
+            import modal  # type: ignore[import-untyped]
+            from capsule_cloud.replay_worker import run_replay  # type: ignore[import]
+
+            # Inject credentials so the Modal client uses our account
+            modal.config._profile = None  # reset any cached profile
+            import os as _os
+            _os.environ.setdefault("MODAL_TOKEN_ID", settings.modal_token_id)
+            _os.environ.setdefault("MODAL_TOKEN_SECRET", settings.modal_token_secret)
+
+            run_replay.spawn(
+                storage_path=session.storage_path,
+                mode=body.mode,
+                branch_from_step=body.branch_from_step,
+                storage_endpoint=settings.storage_endpoint,
+                storage_access_key=settings.storage_access_key,
+                storage_secret_key=settings.storage_secret_key,
+                storage_bucket=settings.storage_bucket,
+            )
+            replay_status = "queued"
+        except Exception as exc:
+            # Don't hard-fail — log and degrade gracefully
+            import structlog
+            structlog.get_logger(__name__).warning("modal_spawn_failed", error=str(exc))
+            replay_status = "error"
+    else:
+        replay_status = "pending_modal_config"
+
+    return ReplayResponse(
+        id=replay_id,
+        session_id=session_id,
+        status=replay_status,
+        replay_mode=body.mode,
+        branch_from_step=body.branch_from_step,
+        created_at=datetime.now(timezone.utc),
+    )
+
 
 # ── Helpers ───────────────────────────────────────────────────
 
