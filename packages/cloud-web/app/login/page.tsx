@@ -72,6 +72,7 @@ export default function LoginPage() {
             <div className={`field${passErr ? ' show-err' : ''}`}>
               <div className="auth-row">
                 <label htmlFor="pass">Password</label>
+                <a href="/forgot-password" style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>Forgot password?</a>
               </div>
               <div className="input-group">
                 <input

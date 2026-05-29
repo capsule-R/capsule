@@ -1,7 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LogoMark } from './Logo';
+import { getCurrentUser, logout, type UserProfile } from '@/lib/capsule';
 
 const NAV_ITEMS = [
   {
@@ -12,11 +14,11 @@ const NAV_ITEMS = [
         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6" stroke="currentColor" strokeWidth="1.7"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" stroke="currentColor" strokeWidth="1.7"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" stroke="currentColor" strokeWidth="1.7"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" stroke="currentColor" strokeWidth="1.7"/></svg>,
       },
       {
-        id: 'sessions', label: 'Sessions', href: '/dashboard/sessions', count: '1,284',
+        id: 'sessions', label: 'Sessions', href: '/dashboard/sessions',
         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.7"/><path d="M3 8.5h18M7 13h6M7 16.5h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>,
       },
       {
-        id: 'branches', label: 'Branches', href: '/dashboard/branches', count: '37',
+        id: 'branches', label: 'Branches', href: '/dashboard/branches',
         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.4" stroke="currentColor" strokeWidth="1.7"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.7"/><circle cx="6" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.7"/><path d="M6 8.4v3.6a3 3 0 0 0 3 3h6.6" stroke="currentColor" strokeWidth="1.7"/></svg>,
       },
     ],
@@ -24,6 +26,10 @@ const NAV_ITEMS = [
   {
     group: 'Settings',
     items: [
+      {
+        id: 'general', label: 'General', href: '/dashboard/settings/general',
+        icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="1.7"/></svg>,
+      },
       {
         id: 'keys', label: 'API Keys', href: '/dashboard/settings/api-keys',
         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="4.2" stroke="currentColor" strokeWidth="1.7"/><path d="M11 11l8 8M16 16l2-2M14 18l2-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
@@ -44,7 +50,27 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
+function initials(name: string | null | undefined, email: string): string {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
+}
+
 export function DashboardShell({ active, title, crumb, action, children }: DashboardShellProps) {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  useEffect(() => {
+    getCurrentUser().then(setUser);
+  }, []);
+
+  const displayName = user?.full_name || user?.email?.split('@')[0] || '…';
+  const displayEmail = user?.email || '';
+  const avatarText = user ? initials(user.full_name, user.email) : '…';
+
   return (
     <div className="app">
       {/* Sidebar */}
@@ -54,17 +80,6 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
             <LogoMark />
             <span className="wordmark">Capsule</span>
           </a>
-        </div>
-
-        <div className="sb-env">
-          <button className="env-switch">
-            <span className="dot" />
-            <span className="et">production</span>
-            <span className="es">checkout-agent</span>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8 }}>
-              <path d="M7 10l5 5 5-5" stroke="#606060" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
         </div>
 
         <nav className="sb-nav">
@@ -79,7 +94,6 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
                 >
                   {item.icon}
                   <span>{item.label}</span>
-                  {item.count && <span className="count">{item.count}</span>}
                 </Link>
               ))}
             </div>
@@ -97,15 +111,43 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
         </nav>
 
         <div className="sb-foot">
-          <div className="user-chip">
-            <div className="avatar">DK</div>
-            <div>
-              <div className="un">Dana Okonkwo</div>
-              <div className="ue">dana@helix.ai</div>
+          <div
+            className="user-chip"
+            style={{ position: 'relative', cursor: 'pointer' }}
+            onClick={() => setShowUserMenu((v) => !v)}
+          >
+            <div className="avatar">{avatarText}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="un" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+              <div className="ue" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayEmail}</div>
             </div>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
               <path d="M8 9l4-4 4 4M8 15l4 4 4-4" stroke="#606060" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
+
+            {showUserMenu && (
+              <div
+                style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 6, background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 50 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Link
+                  href="/dashboard/settings/general"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', fontSize: 13.5, color: 'var(--text-secondary)', textDecoration: 'none' }}
+                  onClick={() => setShowUserMenu(false)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.7"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+                  Account settings
+                </Link>
+                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 14px' }} />
+                <button
+                  onClick={() => logout()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 14px', fontSize: 13.5, color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </aside>

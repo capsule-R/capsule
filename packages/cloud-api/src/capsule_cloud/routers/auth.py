@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.auth import (
+    _create_token,
+    _decode_token,
     create_access_token,
     create_refresh_token,
     get_current_user,
@@ -18,7 +22,16 @@ from capsule_cloud.auth import (
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud.models import User, Workspace, WorkspaceMember
-from capsule_cloud.schemas import LoginRequest, SignupRequest, TokenResponse, UserResponse
+from capsule_cloud.schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    SignupRequest,
+    TokenResponse,
+    UpdateProfileRequest,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -116,3 +129,121 @@ async def refresh_token(
 async def get_me(current_user: User = Depends(get_current_user)) -> User:
     """Return the currently authenticated user's profile."""
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    body: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Update the current user's display name or email."""
+    if body.full_name is not None:
+        current_user.full_name = body.full_name
+    if body.email is not None:
+        # Check uniqueness
+        result = await db.execute(
+            select(User).where(User.email == str(body.email), User.id != current_user.id)
+        )
+        if result.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists",
+            )
+        current_user.email = str(body.email)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Change the current user's password (requires current password for verification)."""
+    if current_user.hashed_password is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account uses OAuth login and has no password to change",
+        )
+    if not verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+    current_user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+    return {"message": "Password changed successfully"}
+
+
+@router.post("/logout")
+async def logout() -> dict:
+    """Logout endpoint — client should clear its tokens. No server-side state to clear (stateless JWTs)."""
+    return {"message": "Logged out successfully"}
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Generate a password-reset token.
+
+    In production this sends an email with the reset link.
+    For development the reset token is returned in the response body.
+    """
+    import structlog as _log
+    logger = _log.get_logger(__name__)
+
+    # Always return the same message to avoid user enumeration
+    result = await db.execute(
+        select(User).where(User.email == str(body.email), User.deleted_at.is_(None))
+    )
+    user = result.scalars().first()
+
+    if user:
+        # Reuse the JWT machinery — create a short-lived password-reset token
+        reset_token = _create_token(
+            {"sub": user.id, "email": str(body.email)},
+            "password_reset",
+            timedelta(hours=1),
+        )
+        logger.info("password_reset.token_generated", email=str(body.email))
+        settings = get_settings()
+        if settings.environment == "development":
+            # Return token directly in dev so the flow is testable without email
+            return {
+                "message": "Password reset token generated. In production this would be emailed.",
+                "reset_token": reset_token,
+            }
+
+    return {"message": "If an account exists with that email, you'll receive a reset link shortly."}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Validate a password-reset token and update the user's password."""
+    # Decode and validate the JWT reset token
+    try:
+        user_id = _decode_token(body.token, "password_reset")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalars().first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid reset token")
+
+    user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+    return {"message": "Password updated successfully. You can now log in."}

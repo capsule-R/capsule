@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
+import { getCurrentUser } from '@/lib/capsule';
 
 function UsageBar({ label, used, total, unit, color = 'var(--accent)' }: {
   label: string; used: number; total: number; unit: string; color?: string;
@@ -54,6 +55,13 @@ const INVOICES = [
 
 export default function BillingPage() {
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [billingEmail, setBillingEmail] = useState('');
+
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      if (u?.email) setBillingEmail(u.email);
+    });
+  }, []);
 
   return (
     <DashboardShell active="billing" title="Billing & Plan" crumb="workspace / settings / billing">
@@ -110,7 +118,7 @@ export default function BillingPage() {
           <div style={{ marginTop: 20 }}>
             <h3 style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Billing email</h3>
             <div style={{ display: 'flex', gap: 10 }}>
-              <input className="input" defaultValue="dana@helix.ai" style={{ flex: 1 }} />
+              <input className="input" value={billingEmail} onChange={(e) => setBillingEmail(e.target.value)} style={{ flex: 1 }} />
               <button className="btn btn-ghost btn-sm">Save</button>
             </div>
           </div>

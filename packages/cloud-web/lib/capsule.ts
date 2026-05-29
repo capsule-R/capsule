@@ -1,14 +1,16 @@
 /**
  * Capsule API client — handles auth tokens and authenticated fetch.
- * Tokens are stored as first-party cookies so middleware can read them
- * without JS (edge runtime).
+ *
+ * Tokens are stored as plain (non-httpOnly) cookies so the middleware can
+ * read them server-side from the Cookie header on every navigation request.
+ * They are still scoped to the same origin (SameSite=Lax; path=/).
  */
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-const TOKEN_COOKIE  = 'capsule_token';
-const REFRESH_COOKIE = 'capsule_refresh';
+export const TOKEN_COOKIE   = 'capsule_token';
+export const REFRESH_COOKIE = 'capsule_refresh';
 
 // ── Cookie helpers ────────────────────────────────────────────
 
@@ -22,11 +24,12 @@ function getCookie(name: string): string | null {
 }
 
 function setCookie(name: string, value: string, maxAgeSeconds: number): void {
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
+  document.cookie =
+    `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
 }
 
 function deleteCookie(name: string): void {
-  document.cookie = `${name}=; path=/; max-age=0`;
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
 }
 
 // ── Token management ──────────────────────────────────────────
@@ -36,14 +39,19 @@ export function getToken(): string | null {
 }
 
 export function setTokens(access: string, refresh: string): void {
-  const week = 60 * 60 * 24 * 7;
-  setCookie(TOKEN_COOKIE, access, week);
-  setCookie(REFRESH_COOKIE, refresh, week);
+  const month = 60 * 60 * 24 * 30;
+  setCookie(TOKEN_COOKIE,   access,  month);
+  setCookie(REFRESH_COOKIE, refresh, month);
 }
 
 export function clearTokens(): void {
   deleteCookie(TOKEN_COOKIE);
   deleteCookie(REFRESH_COOKIE);
+}
+
+export function logout(): void {
+  clearTokens();
+  window.location.href = '/login';
 }
 
 // ── Auth calls ────────────────────────────────────────────────
@@ -52,6 +60,14 @@ export interface TokenResponse {
   access_token: string;
   refresh_token: string;
   expires_in: number;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
 }
 
 export async function login(
@@ -93,6 +109,35 @@ export async function signup(
   }
 }
 
+export async function forgotPassword(
+  email: string,
+): Promise<{ message: string; reset_token?: string }> {
+  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+export async function resetPassword(
+  token: string,
+  new_password: string,
+): Promise<{ message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password }),
+    });
+    const json = await res.json();
+    if (!res.ok) return { error: json.detail ?? 'Reset failed' };
+    return { message: json.message };
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
+}
+
 // ── Authenticated fetch ───────────────────────────────────────
 
 export async function apiFetch(
@@ -106,4 +151,60 @@ export async function apiFetch(
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return fetch(`${API_BASE}${path}`, { ...opts, headers });
+}
+
+// ── User helpers ─────────────────────────────────────────────
+
+let _userCache: UserProfile | null = null;
+
+export async function getCurrentUser(): Promise<UserProfile | null> {
+  if (_userCache) return _userCache;
+  try {
+    const res = await apiFetch('/auth/me');
+    if (!res.ok) return null;
+    _userCache = await res.json();
+    return _userCache;
+  } catch {
+    return null;
+  }
+}
+
+export function clearUserCache(): void {
+  _userCache = null;
+}
+
+// ── Profile management ────────────────────────────────────────
+
+export async function updateProfile(
+  data: { full_name?: string; email?: string },
+): Promise<{ data?: UserProfile; error?: string }> {
+  try {
+    const res = await apiFetch('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) return { error: json.detail ?? 'Update failed' };
+    _userCache = json as UserProfile;
+    return { data: json };
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
+}
+
+export async function changePassword(
+  current_password: string,
+  new_password: string,
+): Promise<{ message?: string; error?: string }> {
+  try {
+    const res = await apiFetch('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    });
+    const json = await res.json();
+    if (!res.ok) return { error: json.detail ?? 'Password change failed' };
+    return { message: json.message };
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
 }
