@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { DashboardShell } from '@/components/DashboardShell';
-import { createClient } from '@/lib/supabase/client';
+import { apiFetch } from '@/lib/capsule';
 
 const PROJECTS: [string, string][] = [
   ['checkout-agent', 'var(--accent)'],
@@ -31,42 +31,38 @@ export default function SessionsPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const supabase = createClient();
-        const { data: { session: authSession } } = await supabase.auth.getSession();
-        const token = authSession?.access_token;
-        if (!token) return;
-
-        const headers = { Authorization: `Bearer ${token}` };
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
-        const wsRes = await fetch(`${apiUrl}/workspaces`, { headers });
+        const wsRes = await apiFetch('/workspaces');
         if (!wsRes.ok) throw new Error('Failed to fetch workspaces');
         const workspaces = await wsRes.json();
-        
+
         if (workspaces.length === 0) {
           setLoading(false);
           return;
         }
-        
+
         const wsId = workspaces[0].id;
-        const sessionsRes = await fetch(`${apiUrl}/workspaces/${wsId}/sessions?limit=100`, { headers });
+        const sessionsRes = await apiFetch(`/workspaces/${wsId}/sessions?limit=100`);
         if (!sessionsRes.ok) throw new Error('Failed to fetch sessions');
-        
+
         const sessionsData = await sessionsRes.json();
-        
-        // Map backend format to frontend format
-        const mapped: Session[] = sessionsData.items.map((s: any) => ({
-          id: s.id,
-          st: s.status === 'completed' ? ['ok', 'completed'] : ['err', 'failed'],
-          proj: ['checkout-agent', 'var(--accent)'], // Mock project for now
-          model: s.agent_name || 'gpt-4o',
-          steps: s.step_count || 0,
-          dur: s.duration_ms ? `${(s.duration_ms / 1000).toFixed(1)}s` : '—',
-          cost: '$0.0000',
-          when: new Date(s.uploaded_at).toLocaleDateString(),
-          costN: 0
-        }));
-        
+
+        // Map backend format to frontend format.
+        // Backend status values: 'success' | 'failed' | 'completed' | 'running'
+        const mapped: Session[] = sessionsData.items.map((s: any) => {
+          const isOk = s.status === 'success' || s.status === 'completed';
+          return {
+            id: s.id,
+            st: isOk ? ['ok', 'completed'] : ['err', 'failed'],
+            proj: [s.agent_name || 'default', 'var(--accent)'],
+            model: s.agent_name || '—',
+            steps: s.step_count || 0,
+            dur: s.duration_ms ? `${(s.duration_ms / 1000).toFixed(1)}s` : '—',
+            cost: '$0.0000',
+            when: new Date(s.uploaded_at).toLocaleDateString(),
+            costN: 0,
+          };
+        });
+
         setSessions(mapped);
       } catch (err) {
         console.error(err);

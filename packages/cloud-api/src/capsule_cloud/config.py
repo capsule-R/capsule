@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +16,20 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production-use-32-random-bytes"
 
     # Database
-    database_url: str = "sqlite:///./capsule_cloud.db"
+    database_url: str = "sqlite+aiosqlite:///./capsule_cloud.db"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_async_database_url(cls, v: str) -> str:
+        """Auto-prefix legacy sync URLs so async SQLAlchemy drivers are used."""
+        if v.startswith("postgres://"):
+            # Heroku / Railway shorthand
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://") and "+asyncpg" not in v:
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if v.startswith("sqlite:///") and "+aiosqlite" not in v:
+            return v.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+        return v
 
     # Object storage (Cloudflare R2 / S3-compatible)
     storage_endpoint: str = ""
@@ -25,16 +39,21 @@ class Settings(BaseSettings):
 
     # Auth
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
-    refresh_token_expire_days: int = 7
+    access_token_expire_minutes: int = 60      # 1 hour — better UX for SPAs
+    refresh_token_expire_days: int = 30
 
     # Upload limits (bytes)
     max_upload_size_hobby: int = 100 * 1024 * 1024    # 100 MB
     max_upload_size_pro: int = 500 * 1024 * 1024      # 500 MB
     max_upload_size_business: int = 5 * 1024 * 1024 * 1024  # 5 GB
 
-    # CORS
-    allowed_origins: list[str] = ["http://localhost:3000", "https://capsule.dev"]
+    # CORS — override with ALLOWED_ORIGINS env var in production
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "https://capsule.dev",
+        "https://*.vercel.app",
+        "https://*.railway.app",
+    ]
 
 
 _settings: Settings | None = None

@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { updateSession } from '@/lib/supabase/middleware';
 
 const PUBLIC_PATHS = ['/', '/login', '/signup'];
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow all public routes and static files through
+  // Allow public routes and static files through
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith('/_next') ||
@@ -16,19 +15,18 @@ export async function middleware(request: NextRequest) {
 
   if (isPublic) return NextResponse.next();
 
-  // Dashboard routes: verify Supabase JWT
-  const { supabaseResponse, user } = await updateSession(request);
+  // Protect dashboard routes — require a capsule_token cookie
+  const token = request.cookies.get('capsule_token')?.value;
 
-  if (!user) {
+  if (!token) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  return supabaseResponse;
+  return NextResponse.next();
 }
 
 export const config = {
-  // Run middleware on all routes except static assets
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

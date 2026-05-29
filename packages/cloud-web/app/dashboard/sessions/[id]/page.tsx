@@ -23,12 +23,12 @@ interface Detail {
   error?: string;
 }
 
-/* ─── Mock data ─────────────────────────────────────────────── */
+/* ─── Step kind colours ─────────────────────────────────────── */
 const KIND_COLOR: Record<string, string> = {
   llm: 'var(--accent)',
   tool: 'var(--warn)',
   memory: 'var(--replay)',
-  branch: '#A78BFA',
+  branch: 'var(--replay)',
   session: 'var(--success)',
 };
 
@@ -179,14 +179,14 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
 }
 
 /* ─── Page ───────────────────────────────────────────────────── */
-import { createClient } from '@/lib/supabase/client';
+import { apiFetch } from '@/lib/capsule';
 
 export default function SessionDetailPage({ params }: { params: { id: string } }) {
   const sessionId = params.id ?? 'sess_8f2a91c4';
   const [STEPS, setSteps] = useState<Step[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -195,23 +195,15 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   useEffect(() => {
     async function loadData() {
       try {
-        const supabase = createClient();
-        const { data: { session: authSession } } = await supabase.auth.getSession();
-        const token = authSession?.access_token;
-        if (!token) return;
-
-        const headers = { Authorization: `Bearer ${token}` };
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
         // Fetch workspace
-        const wsRes = await fetch(`${apiUrl}/workspaces`, { headers });
+        const wsRes = await apiFetch('/workspaces');
         if (!wsRes.ok) throw new Error('Failed to fetch workspaces');
         const workspaces = await wsRes.json();
         if (workspaces.length === 0) throw new Error('No workspace found');
         const wsId = workspaces[0].id;
 
         // Fetch events
-        const eventsRes = await fetch(`${apiUrl}/workspaces/${wsId}/sessions/${sessionId}/events`, { headers });
+        const eventsRes = await apiFetch(`/workspaces/${wsId}/sessions/${sessionId}/events`);
         if (!eventsRes.ok) throw new Error('Failed to fetch session events or no capsule binary found');
         
         const eventsData = await eventsRes.json();

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { LogoMark } from '@/components/Logo';
+import { signup } from '@/lib/capsule';
 
 const STRENGTH_COLORS = ['var(--error)', 'var(--warn)', 'var(--warn)', 'var(--success)'];
 const STRENGTH_LABELS = ['Weak password', 'Fair — add more variety', 'Good password', 'Strong password'];
@@ -30,7 +31,6 @@ export default function SignupPage() {
   const [passErr, setPassErr] = useState(false);
   const [termsErr, setTermsErr] = useState(false);
   const [authErr, setAuthErr] = useState('');
-  const [successMsg, setSuccessMsg] = useState(false);
 
   const score = passwordScore(password);
 
@@ -46,35 +46,14 @@ export default function SignupPage() {
     setTermsErr(!tOk);
     setAuthErr('');
     if (!nOk || !eOk || !pOk || !tOk) return;
-    
-    setLoading(true);
-    
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name,
-        },
-      },
-    });
 
+    setLoading(true);
+    const { error } = await signup(email.trim(), password, name.trim());
     if (error) {
       setLoading(false);
-      setAuthErr(error.message);
+      setAuthErr(error);
       return;
     }
-
-    if (!data.session) {
-      setLoading(false);
-      setSuccessMsg(true);
-      return;
-    }
-
-    // Automatically redirect to dashboard (Supabase will log them in if email confirmation is off)
     window.location.href = '/dashboard';
   };
 
@@ -94,23 +73,14 @@ export default function SignupPage() {
           <h1>Start capturing.</h1>
           <p className="sub">Create a free account — 1,000 captured sessions / month, no card required.</p>
 
-          {successMsg ? (
-            <div style={{ background: 'rgba(0, 255, 128, 0.1)', border: '1px solid rgba(0, 255, 128, 0.2)', padding: '24px', borderRadius: 8, marginTop: 24 }}>
-              <h3 style={{ color: 'var(--success)', marginBottom: 8 }}>Check your email</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>
-                We sent a verification link to <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>. Please click the link to confirm your account and sign in.
-              </p>
-            </div>
-          ) : (
-            <>
-              <form className="auth-fields" onSubmit={handleSubmit} noValidate>
-                {authErr && (
-                  <div style={{ color: 'var(--error)', fontSize: 14, marginBottom: 16, padding: '12px 16px', background: 'rgba(255, 60, 60, 0.1)', borderRadius: 6, border: '1px solid rgba(255, 60, 60, 0.2)' }}>
-                    {authErr}
-                  </div>
-                )}
-                <div className={`field${nameErr ? ' show-err' : ''}`}>
-                  <label htmlFor="name">Full name</label>
+          <form className="auth-fields" onSubmit={handleSubmit} noValidate>
+            {authErr && (
+              <div style={{ color: 'var(--error)', fontSize: 14, marginBottom: 16, padding: '12px 16px', background: 'rgba(255, 60, 60, 0.1)', borderRadius: 6, border: '1px solid rgba(255, 60, 60, 0.2)' }}>
+                {authErr}
+              </div>
+            )}
+            <div className={`field${nameErr ? ' show-err' : ''}`}>
+              <label htmlFor="name">Full name</label>
               <input
                 className="input"
                 type="text"
@@ -203,31 +173,9 @@ export default function SignupPage() {
             </button>
           </form>
 
-          <div className="auth-sep">OR</div>
-
-          <div className="oauth">
-            <button className="btn btn-ghost" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.6.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.4-3.4-1.4-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 22 12.2C22 6.6 17.5 2 12 2z"/>
-              </svg>
-              GitHub
-            </button>
-            <button className="btn btn-ghost" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M21.6 12.2c0-.7-.1-1.3-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#A0A0A0"/>
-                <path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#A0A0A0"/>
-                <path d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14z" fill="#606060"/>
-                <path d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4 5.6-4z" fill="#A0A0A0"/>
-              </svg>
-              Google SSO
-            </button>
-          </div>
-
           <p className="auth-foot">
             Already have an account? <Link href="/login">Log in</Link>
           </p>
-          </>
-          )}
         </div>
 
         <div className="auth-legal">

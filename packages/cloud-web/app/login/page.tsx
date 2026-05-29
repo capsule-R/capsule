@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { LogoMark } from '@/components/Logo';
+import { login } from '@/lib/capsule';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
-  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [loading, setLoading] = useState(false);
   const [emailErr, setEmailErr] = useState(false);
   const [passErr, setPassErr] = useState(false);
@@ -22,23 +22,14 @@ export default function LoginPage() {
     setPassErr(!passOk);
     setAuthErr('');
     if (!emailOk || !passOk) return;
-    
-    setLoading(true);
-    
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
 
+    setLoading(true);
+    const { error } = await login(email.trim(), password);
     if (error) {
       setLoading(false);
-      setAuthErr(error.message);
+      setAuthErr(error);
       return;
     }
-    
     window.location.href = '/dashboard';
   };
 
@@ -81,7 +72,6 @@ export default function LoginPage() {
             <div className={`field${passErr ? ' show-err' : ''}`}>
               <div className="auth-row">
                 <label htmlFor="pass">Password</label>
-                <a href="#">Forgot password?</a>
               </div>
               <div className="input-group">
                 <input
@@ -108,44 +98,10 @@ export default function LoginPage() {
               <span className="field-err">Password is required.</span>
             </div>
 
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={keepLoggedIn}
-                onChange={(e) => setKeepLoggedIn(e.target.checked)}
-              />
-              <span className="box">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-                  <path d="M5 13l4 4 10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </span>
-              <span>Keep me logged in for 30 days</span>
-            </label>
-
             <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 6 }} disabled={loading}>
               {loading ? 'Logging in…' : 'Log in'}
             </button>
           </form>
-
-          <div className="auth-sep">OR</div>
-
-          <div className="oauth">
-            <button className="btn btn-ghost" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.6.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.4-3.4-1.4-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 22 12.2C22 6.6 17.5 2 12 2z"/>
-              </svg>
-              GitHub
-            </button>
-            <button className="btn btn-ghost" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M21.6 12.2c0-.7-.1-1.3-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#A0A0A0"/>
-                <path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#A0A0A0"/>
-                <path d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14z" fill="#606060"/>
-                <path d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4 5.6-4z" fill="#A0A0A0"/>
-              </svg>
-              Google SSO
-            </button>
-          </div>
 
           <p className="auth-foot">
             Don&apos;t have an account? <Link href="/signup">Sign up free</Link>
