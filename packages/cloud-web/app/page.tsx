@@ -40,6 +40,7 @@ const NAV_LINKS = [
 
 function Nav() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -47,34 +48,61 @@ function Nav() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
   return (
-    <nav style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-      background: scrolled ? 'color-mix(in oklab, var(--bg-base) 88%, transparent)' : 'transparent',
-      backdropFilter: scrolled ? 'blur(12px)' : 'none',
-      borderBottom: `1px solid ${scrolled ? 'var(--border-subtle)' : 'transparent'}`,
-      transition: 'background .25s, border-color .25s',
-    }}>
-      <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', height: 64 }}>
-        <a className="brand" href="/" style={{ textDecoration: 'none' }}>
-          <LogoMark size={38} />
-          <span className="wordmark" style={{ fontSize: 17 }}>Capsule</span>
-        </a>
-        <div style={{ flex: 1 }} />
-        <div className="lp-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 26, marginRight: 28 }}>
-          {NAV_LINKS.map(({ label, href }) => (
-            <a key={label} href={href} style={{ fontSize: 13.5, color: 'var(--text-secondary)', transition: 'color .12s' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-              {label}
-            </a>
-          ))}
+    <>
+      <nav style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+        background: scrolled ? 'color-mix(in oklab, var(--bg-base) 88%, transparent)' : 'transparent',
+        backdropFilter: scrolled ? 'blur(12px)' : 'none',
+        borderBottom: `1px solid ${scrolled ? 'var(--border-subtle)' : 'transparent'}`,
+        transition: 'background .25s, border-color .25s',
+      }}>
+        <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', height: 64 }}>
+          <a className="brand" href="/" style={{ textDecoration: 'none' }}>
+            <LogoMark size={38} />
+            <span className="wordmark" style={{ fontSize: 17 }}>Capsule</span>
+          </a>
+          <div style={{ flex: 1 }} />
+          <div className="lp-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 26, marginRight: 28 }}>
+            {NAV_LINKS.map(({ label, href }) => (
+              <a key={label} href={href} style={{ fontSize: 13.5, color: 'var(--text-secondary)', transition: 'color .12s' }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}>
+                {label}
+              </a>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <Link href="/login" className="btn btn-ghost btn-sm lp-nav-login">Log in</Link>
+            <Link href="/signup" className="btn btn-primary btn-sm">Start free</Link>
+            <button
+              className="lp-hamburger"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              {menuOpen ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 6l12 12M6 18L18 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 7h18M3 12h18M3 17h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Link href="/login" className="btn btn-ghost btn-sm">Log in</Link>
-          <Link href="/signup" className="btn btn-primary btn-sm">Start free</Link>
+      </nav>
+      {/* Mobile dropdown menu */}
+      <div className={`lp-mobile-menu${menuOpen ? ' open' : ''}`}>
+        {NAV_LINKS.map(({ label, href }) => (
+          <a key={label} href={href} onClick={() => setMenuOpen(false)}>{label}</a>
+        ))}
+        <div className="lp-mobile-menu-ctas">
+          <Link href="/login" className="btn btn-ghost btn-sm" onClick={() => setMenuOpen(false)}>Log in</Link>
+          <Link href="/signup" className="btn btn-primary btn-sm" onClick={() => setMenuOpen(false)}>Start free</Link>
         </div>
       </div>
-    </nav>
+    </>
   );
 }
 

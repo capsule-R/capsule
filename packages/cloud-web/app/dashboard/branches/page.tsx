@@ -76,7 +76,7 @@ export default function BranchesPage() {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+      <div className="dash-branch-stats">
         {([
           { label: 'Open', key: 'open', color: 'var(--replay)' },
           { label: 'Merged', key: 'merged', color: 'var(--success)' },

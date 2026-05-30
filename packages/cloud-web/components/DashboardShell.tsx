@@ -58,6 +58,7 @@ function initials(name: string | null | undefined, email: string): string {
 export function DashboardShell({ active, title, crumb, action, children }: DashboardShellProps) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     getCurrentUser().then(setUser);
@@ -69,8 +70,13 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
 
   return (
     <div className="app">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="sidebar-drawer-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
         <div className="sb-brand">
           <a className="brand" href="/dashboard">
             <LogoMark />
@@ -78,7 +84,7 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
           </a>
         </div>
 
-        <nav className="sb-nav">
+        <nav className="sb-nav" onClick={() => setSidebarOpen(false)}>
           {NAV_ITEMS.map((group) => (
             <div key={group.group} className="nav-group">
               <div className="gl">{group.group}</div>
@@ -148,6 +154,15 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
       {/* Main */}
       <main className="main">
         <header className="topbar">
+          <button
+            className="mobile-nav-toggle"
+            aria-label="Toggle navigation"
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M3 7h18M3 12h18M3 17h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
           <div className="tb-title">
             {crumb && <span className="tb-crumb">{crumb}</span>}
             <h1>{title}</h1>

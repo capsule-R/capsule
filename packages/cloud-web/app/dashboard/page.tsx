@@ -187,7 +187,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Chart + Attention */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.65fr 1fr', gap: 16, marginTop: 16 }}>
+      <div className="dash-chart-grid">
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22 }}>
             <div>
