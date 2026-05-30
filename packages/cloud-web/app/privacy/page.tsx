@@ -136,8 +136,6 @@ export default function PrivacyPage() {
                 <a
                   href={`#${s.id}`}
                   style={{ fontSize: 13.5, color: 'var(--text-secondary)', textDecoration: 'none' }}
-                  onMouseOver={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-                  onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
                 >
                   {s.title}
                 </a>

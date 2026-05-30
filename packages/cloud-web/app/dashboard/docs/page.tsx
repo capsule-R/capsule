@@ -199,7 +199,7 @@ pip install "capsule-sdk[langchain]"       # LangChain + LangGraph
 pip install "capsule-sdk[openai,anthropic]" # multiple providers</Code>
 
           <H3>2. Wrap your agent</H3>
-          <Code lang="python">import capsule
+          <Code lang="python">{`import capsule
 
 @capsule.trace(agent_name="my-agent", agent_version="1.0.0")
 def run_agent(query: str) -> str:
@@ -210,7 +210,7 @@ def run_agent(query: str) -> str:
 # async agents are supported too
 @capsule.trace(agent_name="async-agent")
 async def run_async_agent(query: str) -> str:
-    ...</Code>
+    ...`}</Code>
 
           <H3>3. Connect to your workspace</H3>
           <P>Set your API key (found in <b>Settings → API Keys</b>) and workspace ID:</P>
@@ -506,14 +506,14 @@ def run_chain(query: str) -> str:
 
           <H3>LangGraph</H3>
           <Code lang="python">pip install "capsule-sdk[langchain]"  # includes langgraph hooks</Code>
-          <Code lang="python">import capsule
+          <Code lang="python">{`import capsule
 from langgraph.graph import StateGraph
 
 @capsule.trace(agent_name="langgraph-agent")
 async def run_graph(state: dict) -> dict:
     graph = StateGraph(...)
     app = graph.compile()
-    return await app.ainvoke(state)</Code>
+    return await app.ainvoke(state)`}</Code>
 
           <H3>Manual event capture</H3>
           <P>For unsupported providers, emit events directly:</P>
