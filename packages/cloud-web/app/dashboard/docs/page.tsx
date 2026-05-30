@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
 
 const NAV = [
@@ -47,7 +47,7 @@ function Code({ children, lang = '' }: { children: string; lang?: string }) {
   );
 }
 
-function Param({ name, type, required, children }: { name: string; type: string; required?: boolean; children: React.ReactNode }) {
+function Param({ name, type, required, children }: { name: string; type: string; required?: boolean; children: ReactNode }) {
   return (
     <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border-subtle)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
       <div style={{ minWidth: 180 }}>
@@ -62,7 +62,7 @@ function Param({ name, type, required, children }: { name: string; type: string;
   );
 }
 
-function H2({ id, children }: { id: string; children: React.ReactNode }) {
+function H2({ id, children }: { id: string; children: ReactNode }) {
   return (
     <h2 id={id} style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 52, marginBottom: 16, paddingTop: 20, color: 'var(--text-primary)' }}>
       {children}
@@ -70,7 +70,7 @@ function H2({ id, children }: { id: string; children: React.ReactNode }) {
   );
 }
 
-function H3({ children }: { children: React.ReactNode }) {
+function H3({ children }: { children: ReactNode }) {
   return (
     <h3 style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-0.01em', marginTop: 32, marginBottom: 10, color: 'var(--text-primary)' }}>
       {children}
@@ -78,7 +78,7 @@ function H3({ children }: { children: React.ReactNode }) {
   );
 }
 
-function P({ children }: { children: React.ReactNode }) {
+function P({ children }: { children: ReactNode }) {
   return <p style={{ color: 'var(--text-secondary)', fontSize: 14.5, lineHeight: 1.75, marginBottom: 12 }}>{children}</p>;
 }
 
@@ -96,7 +96,7 @@ function Chip({ children, color }: { children: string; color?: string }) {
   );
 }
 
-function Table({ headers, rows }: { headers: string[]; rows: (string | React.ReactNode)[][] }) {
+function Table({ headers, rows }: { headers: string[]; rows: (string | ReactNode)[][] }) {
   return (
     <div style={{ overflowX: 'auto', marginTop: 12, marginBottom: 4 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
