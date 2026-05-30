@@ -86,8 +86,8 @@ function Chip({ children, color }: { children: string; color?: string }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px',
-      background: color ? `${color}22` : 'var(--bg-elevated)',
-      border: `1px solid ${color ? `${color}44` : 'var(--border-default)'}`,
+      background: color ? (color + '22') : 'var(--bg-elevated)',
+      border: color ? ('1px solid ' + color + '44') : '1px solid var(--border-default)',
       borderRadius: 4, fontSize: 11.5, fontFamily: 'var(--font-mono)',
       color: color || 'var(--text-secondary)',
     }}>
