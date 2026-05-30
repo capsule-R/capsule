@@ -96,13 +96,10 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
           ))}
 
           <div className="nav-group" style={{ marginTop: 'auto' }}>
-            <a className="nav-item" href="https://docs.capsule.dev" target="_blank" rel="noreferrer">
+            <Link className={`nav-item${'docs' === active ? ' active' : ''}`} href="/dashboard/docs">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/></svg>
               <span>Documentation</span>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto' }}>
-                <path d="M7 17 17 7M9 7h8v8" stroke="#606060" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </a>
+            </Link>
           </div>
         </nav>
 

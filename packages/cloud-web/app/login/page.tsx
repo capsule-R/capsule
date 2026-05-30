@@ -110,7 +110,7 @@ export default function LoginPage() {
         </div>
 
         <div className="auth-legal">
-          Protected by SOC 2 Type II controls · SSO available on Enterprise.
+          Protected by SOC 2 Type II controls · SSO available on Enterprise. · <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Terms</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Privacy</a>
         </div>
       </div>
 

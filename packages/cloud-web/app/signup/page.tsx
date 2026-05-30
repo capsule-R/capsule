@@ -162,9 +162,9 @@ export default function SignupPage() {
               </span>
               <span>
                 I agree to the{' '}
-                <a href="#" style={{ color: 'var(--text-primary)' }}>Terms</a>
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }}>Terms</a>
                 {' '}and{' '}
-                <a href="#" style={{ color: 'var(--text-primary)' }}>Privacy Policy</a>.
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }}>Privacy Policy</a>.
               </span>
             </label>
 

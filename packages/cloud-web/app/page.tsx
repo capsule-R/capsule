@@ -506,10 +506,12 @@ export default function LandingPage() {
               <a href="#compliance">Compliance</a>
               <a href="#">Careers</a>
               <a href="#">Contact</a>
+              <a href="/terms">Terms</a>
+              <a href="/privacy">Privacy</a>
             </div>
           </div>
           <div className="lp-foot-bottom">
-            <span className="cp">© 2026 Capsule, Inc. · All rights reserved.</span>
+            <span className="cp">© 2026 Capsule, Inc. · All rights reserved. · <a href="/terms" style={{ color: 'inherit' }}>Terms</a> · <a href="/privacy" style={{ color: 'inherit' }}>Privacy</a></span>
             <div className="socials">
               <a href="#" aria-label="GitHub"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.6.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.4-3.4-1.4-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 22 12.2C22 6.6 17.5 2 12 2z" /></svg></a>
               <a href="#" aria-label="X"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.2 2H21l-6.6 7.5L22 22h-6.3l-4.9-6.4L5.2 22H2.4l7-8L2 2h6.5l4.4 5.9L18.2 2zm-2.2 18h1.5L8 3.9H6.4L16 20z" /></svg></a>
