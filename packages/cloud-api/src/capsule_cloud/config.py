@@ -81,11 +81,58 @@ class Settings(BaseSettings):
 
     @field_validator("jwt_private_key", "jwt_public_key", mode="before")
     @classmethod
-    def unescape_pem_newlines(cls, v: str) -> str:
-        """Allow \\n literal in env vars to represent real newlines inside PEM blocks."""
-        if v:
-            return v.replace("\\n", "\n")
-        return v
+    def normalize_pem(cls, v: str) -> str:
+        """Make PEM keys robust to however they were pasted into an env var.
+
+        Handles the common ways a multi-line PEM gets mangled in a hosting
+        dashboard (Railway/Vercel/etc.):
+          • surrounding quotes
+          • literal ``\\n`` / ``\\r\\n`` escapes instead of real newlines
+          • the whole PEM base64-encoded into one token
+          • the PEM flattened onto a single line (framing + body run together)
+
+        The body is re-wrapped at 64 chars and the BEGIN/END framing is rebuilt,
+        which fixes the ``MalformedFraming`` error from python-cryptography.
+        """
+        if not v:
+            return v
+        s = v.strip()
+
+        # 1) Strip accidental surrounding quotes.
+        if len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
+            s = s[1:-1].strip()
+
+        # 2) Turn literal escape sequences into real newlines.
+        s = s.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+
+        # 3) If there's no PEM header, maybe the whole PEM was base64-encoded.
+        if "-----BEGIN" not in s:
+            import base64
+            try:
+                decoded = base64.b64decode(s, validate=False).decode()
+                if "-----BEGIN" in decoded:
+                    s = decoded.strip()
+            except Exception:
+                pass
+
+        # 4) Rebuild framing if header/body/footer got flattened together.
+        return cls._reframe_pem(s)
+
+    @staticmethod
+    def _reframe_pem(s: str) -> str:
+        import re
+
+        m = re.search(
+            r"-----BEGIN ([A-Z0-9 ]+?)-----(.*?)-----END \1-----",
+            s,
+            re.DOTALL,
+        )
+        if not m:
+            return s
+        label = m.group(1).strip()
+        body = re.sub(r"\s+", "", m.group(2))  # strip ALL whitespace from body
+        wrapped = "\n".join(body[i : i + 64] for i in range(0, len(body), 64))
+        return f"-----BEGIN {label}-----\n{wrapped}\n-----END {label}-----\n"
 
     @model_validator(mode="after")
     def ensure_jwt_keypair(self) -> "Settings":
