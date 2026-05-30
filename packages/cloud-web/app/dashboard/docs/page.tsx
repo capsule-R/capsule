@@ -239,7 +239,7 @@ capsule_path = session.export("./my_run.capsule")</Code>
 
           <H3>@capsule.trace</H3>
           <P>Decorator that wraps sync or async functions. Each invocation creates and finalizes a Session automatically.</P>
-          <Code lang="python">@capsule.trace(
+          <Code lang="python">{`@capsule.trace(
     agent_name="my-agent",       # shown in dashboard
     agent_version="2.1.0",       # optional semver
     tags=["prod", "gpt-4o"],     # filter in dashboard
@@ -248,7 +248,7 @@ capsule_path = session.export("./my_run.capsule")</Code>
     auto_upload=True,            # upload to cloud after each run
     storage_backend=None,        # custom backend (default: SQLite)
 )
-def my_agent(query: str) -> str: ...</Code>
+def my_agent(query: str) -> str: ...`}</Code>
 
           <div style={{ marginTop: 16 }}>
             <Param name="agent_name" type="str | None">Display name shown in the dashboard. Defaults to the decorated function name.</Param>
@@ -403,8 +403,8 @@ capsule upload 01J2ABC --api-key csk_xxx --workspace ws_yyy</Code>
           />
 
           <H3>TokenResponse shape</H3>
-          <Code lang="json">{"{"}"access_token": "eyJ...", "refresh_token": "eyJ...",
- "token_type": "bearer", "expires_in": 3600{"}"}</Code>
+          <Code lang="json">{`{"access_token": "eyJ...", "refresh_token": "eyJ...",
+ "token_type": "bearer", "expires_in": 3600}`}</Code>
 
           {/* ── .CAPSULE FORMAT ── */}
           <H2 id="format">.capsule Format</H2>
@@ -461,7 +461,7 @@ capsule upload 01J2ABC --api-key csk_xxx --workspace ws_yyy</Code>
 
           <H3>OpenAI</H3>
           <Code lang="python">pip install "capsule-sdk[openai]"</Code>
-          <Code lang="python">import capsule
+          <Code lang="python">{`import capsule
 import openai
 
 client = openai.OpenAI()  # auto-patched when capsule is imported
@@ -472,12 +472,12 @@ def run(query: str) -> str:
         model="gpt-4o",
         messages=[{"role": "user", "content": query}],
     )
-    return resp.choices[0].message.content</Code>
+    return resp.choices[0].message.content`}</Code>
           <P>Capsule patches <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>openai.OpenAI</code> and <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>openai.AsyncOpenAI</code>. Recorded cassettes enable deterministic replay without hitting the API.</P>
 
           <H3>Anthropic</H3>
           <Code lang="python">pip install "capsule-sdk[anthropic]"</Code>
-          <Code lang="python">import capsule
+          <Code lang="python">{`import capsule
 import anthropic
 
 client = anthropic.Anthropic()  # auto-patched
@@ -489,11 +489,11 @@ def run(query: str) -> str:
         max_tokens=1024,
         messages=[{"role": "user", "content": query}],
     )
-    return msg.content[0].text</Code>
+    return msg.content[0].text`}</Code>
 
           <H3>LangChain</H3>
           <Code lang="python">pip install "capsule-sdk[langchain]"</Code>
-          <Code lang="python">import capsule
+          <Code lang="python">{`import capsule
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor
 
@@ -502,7 +502,7 @@ def run_chain(query: str) -> str:
     llm = ChatOpenAI(model="gpt-4o")
     # All LangChain Tool calls and LLM calls are captured automatically
     executor = AgentExecutor(agent=..., tools=[...], llm=llm)
-    return executor.invoke({"input": query})["output"]</Code>
+    return executor.invoke({"input": query})["output"]`}</Code>
 
           <H3>LangGraph</H3>
           <Code lang="python">pip install "capsule-sdk[langchain]"  # includes langgraph hooks</Code>
@@ -517,7 +517,7 @@ async def run_graph(state: dict) -> dict:
 
           <H3>Manual event capture</H3>
           <P>For unsupported providers, emit events directly:</P>
-          <Code lang="python">from capsule import get_current_session
+          <Code lang="python">{`from capsule import get_current_session
 from capsule.core.models import Event, EventType, ToolCallPayload
 from datetime import datetime, timezone
 
@@ -535,7 +535,7 @@ if session:
             arguments={"query": "capsule replay debugger"},
             result={"snippets": [...]},
         ),
-    ))</Code>
+    ))`}</Code>
 
           {/* ── CONFIGURATION ── */}
           <H2 id="config">Configuration</H2>
