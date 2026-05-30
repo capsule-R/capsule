@@ -26,7 +26,34 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def fix_async_database_url(cls, v: str) -> str:
-        """Auto-prefix legacy sync URLs so async SQLAlchemy drivers are used."""
+        """Normalise database URLs for async SQLAlchemy drivers.
+
+        Handles:
+          postgres://       (Heroku/Railway shorthand)
+          postgresql://     (standard, needs +asyncpg)
+          sqlite:///        (needs +aiosqlite)
+          unresolved Railway template variables  → clear error
+          empty string                           → clear error
+        """
+        v = (v or "").strip()
+
+        # Railway template variable was never resolved — "${{Postgres.DATABASE_URL}}"
+        if v.startswith("${{") or v.startswith("${"):
+            raise ValueError(
+                "DATABASE_URL looks like an unresolved Railway template variable "
+                f"({v!r}). "
+                "Go to Railway → your service → Variables and make sure "
+                "DATABASE_URL is linked to your PostgreSQL service "
+                "(click 'Add Reference' and select the Postgres DATABASE_URL)."
+            )
+
+        if not v:
+            raise ValueError(
+                "DATABASE_URL is empty. "
+                "In Railway: go to your service → Variables → "
+                "add DATABASE_URL and reference your PostgreSQL plugin."
+            )
+
         if v.startswith("postgres://"):
             return v.replace("postgres://", "postgresql+asyncpg://", 1)
         if v.startswith("postgresql://") and "+asyncpg" not in v:
