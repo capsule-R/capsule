@@ -332,7 +332,7 @@ function DangerSection() {
               disabled={confirmText !== 'delete my account'}
               onClick={() => {
                 // Account deletion requires backend support — direct user to contact support for now
-                alert('To delete your account, please email support@capsule.dev. We'll process your request within 48 hours.');
+                alert("To delete your account, please email support@capsule.dev. We'll process your request within 48 hours.");
                 setShowConfirm(false);
                 setConfirmText('');
               }}
