@@ -27,10 +27,6 @@ const NAV_ITEMS = [
     group: 'Settings',
     items: [
       {
-        id: 'general', label: 'General', href: '/dashboard/settings/general',
-        icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="1.7"/></svg>,
-      },
-      {
         id: 'keys', label: 'API Keys', href: '/dashboard/settings/api-keys',
         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="4.2" stroke="currentColor" strokeWidth="1.7"/><path d="M11 11l8 8M16 16l2-2M14 18l2-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
       },
@@ -160,19 +156,6 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
             <h1>{title}</h1>
           </div>
           <div className="tb-spacer" />
-          <div className="tb-search">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-              <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.7" />
-              <path d="M16 16l4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-            </svg>
-            <input placeholder="Search sessions, branches…" />
-            <span className="kbd">⌘K</span>
-          </div>
-          <button className="btn btn-icon btn-ghost" aria-label="Notifications">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-              <path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.5 21a1.8 1.8 0 0 0 3 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
           {action && (
             <a className="btn btn-primary btn-sm" href={action.href}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">

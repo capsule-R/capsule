@@ -212,3 +212,131 @@ export async function changePassword(
     return { error: 'Network error — is the API running?' };
   }
 }
+
+// ── Workspaces ────────────────────────────────────────────────
+
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  slug: string;
+  owner_id: string;
+  plan_tier: string;
+  retention_days: number;
+  storage_used_bytes: number;
+  storage_quota_bytes: number;
+  created_at: string;
+}
+
+/** Result of resolving the user's primary workspace. */
+export type WorkspaceResult =
+  | { status: 'ok'; workspace: WorkspaceInfo }
+  | { status: 'none' }      // authenticated but no workspace exists yet
+  | { status: 'error' };    // network / API failure
+
+export async function getPrimaryWorkspace(): Promise<WorkspaceResult> {
+  try {
+    const res = await apiFetch('/workspaces');
+    if (!res.ok) return { status: 'error' };
+    const list = (await res.json()) as WorkspaceInfo[];
+    if (!Array.isArray(list) || list.length === 0) return { status: 'none' };
+    return { status: 'ok', workspace: list[0] };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
+// ── Session stats (dashboard overview) ────────────────────────
+
+export interface SessionStats {
+  total: number;
+  failed: number;
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  range_days: number;
+  daily: { date: string; count: number }[];
+}
+
+export async function getSessionStats(
+  workspaceId: string,
+  days: number,
+): Promise<SessionStats | null> {
+  try {
+    const res = await apiFetch(`/workspaces/${workspaceId}/sessions/stats?days=${days}`);
+    if (!res.ok) return null;
+    return (await res.json()) as SessionStats;
+  } catch {
+    return null;
+  }
+}
+
+// ── Capsule download ──────────────────────────────────────────
+
+/** Download a session's raw `.capsule` archive (sends the auth header, then
+ *  triggers a browser file download). */
+export async function downloadSessionCapsule(
+  workspaceId: string,
+  sessionId: string,
+): Promise<{ error?: string }> {
+  try {
+    const res = await apiFetch(`/workspaces/${workspaceId}/sessions/${sessionId}/download`);
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      return { error: detail?.detail ?? 'Download failed' };
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${sessionId}.capsule`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return {};
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
+}
+
+// ── Formatting helpers ────────────────────────────────────────
+
+/** Format a USD cost. Sub-cent values keep 4 dp so micro-costs aren't shown as $0.00. */
+export function formatUSD(n: number | null | undefined): string {
+  const v = Number(n ?? 0);
+  if (!isFinite(v) || v <= 0) return '$0.00';
+  if (v < 0.01) return `$${v.toFixed(4)}`;
+  return `$${v.toFixed(2)}`;
+}
+
+export function formatBytes(bytes: number | null | undefined): string {
+  const b = Number(bytes ?? 0);
+  if (b <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.max(0, Math.min(units.length - 1, Math.floor(Math.log(b) / Math.log(1024))));
+  const val = b / Math.pow(1024, i);
+  return `${val >= 100 || i === 0 ? Math.round(val) : val.toFixed(1)} ${units[i]}`;
+}
+
+/** Deterministic color for an agent/project name (stable across renders). */
+export function agentColor(name: string): string {
+  const palette = ['var(--accent)', 'var(--replay)', 'var(--warn)', 'var(--success)'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+
+export function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '—';
+  const diff = Date.now() - t;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}

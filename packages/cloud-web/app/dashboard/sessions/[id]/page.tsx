@@ -2,6 +2,13 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
+import {
+  apiFetch,
+  getPrimaryWorkspace,
+  downloadSessionCapsule,
+  formatUSD,
+  relativeTime,
+} from '@/lib/capsule';
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface Step {
@@ -21,6 +28,17 @@ interface Detail {
   input?: string;
   output?: string;
   error?: string;
+}
+
+interface SessionMeta {
+  id: string;
+  status: string;
+  agent_name: string;
+  agent_version: string | null;
+  step_count: number;
+  duration_ms: number | null;
+  total_cost_usd: number;
+  uploaded_at: string;
 }
 
 /* ─── Step kind colours ─────────────────────────────────────── */
@@ -74,19 +92,16 @@ function Timeline({ steps, active, onSeek }: {
   return (
     <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-        {/* Step dots */}
         <div
           ref={trackRef}
           onMouseDown={(e) => { dragging.current = true; seekFromEvent(e); }}
           onClick={(e) => seekFromEvent(e)}
           style={{ flex: 1, height: 40, position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
-          {/* Track */}
           <div style={{ position: 'absolute', left: 0, right: 0, height: 3, background: 'var(--bg-elevated)', borderRadius: 3 }}>
             <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 3, transition: 'width 0.12s' }} />
           </div>
 
-          {/* Step markers */}
           {steps.map((s, i) => {
             const left = steps.length > 1 ? (i / (steps.length - 1)) * 100 : 0;
             return (
@@ -109,7 +124,6 @@ function Timeline({ steps, active, onSeek }: {
             );
           })}
 
-          {/* Thumb */}
           <div style={{
             position: 'absolute',
             left: `${pct}%`,
@@ -126,7 +140,6 @@ function Timeline({ steps, active, onSeek }: {
         </div>
       </div>
 
-      {/* Step labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         {steps.map((s, i) => (
           <div
@@ -178,14 +191,22 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
   );
 }
 
-/* ─── Page ───────────────────────────────────────────────────── */
-import { apiFetch } from '@/lib/capsule';
+function fmtDuration(ms: number | null | undefined): string {
+  if (!ms || ms <= 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
+/* ─── Page ───────────────────────────────────────────────────── */
 export default function SessionDetailPage({ params }: { params: { id: string } }) {
-  const sessionId = params.id ?? 'sess_8f2a91c4';
+  const sessionId = params.id;
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [meta, setMeta] = useState<SessionMeta | null>(null);
   const [STEPS, setSteps] = useState<Step[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -194,49 +215,78 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
 
   useEffect(() => {
     async function loadData() {
-      try {
-        // Fetch workspace
-        const wsRes = await apiFetch('/workspaces');
-        if (!wsRes.ok) throw new Error('Failed to fetch workspaces');
-        const workspaces = await wsRes.json();
-        if (workspaces.length === 0) throw new Error('No workspace found');
-        const wsId = workspaces[0].id;
+      const ws = await getPrimaryWorkspace();
+      if (ws.status !== 'ok') { setNotFound(true); setLoading(false); return; }
+      const wsId = ws.workspace.id;
+      setWorkspaceId(wsId);
 
-        // Fetch events
+      // Session record (DB metadata — always available if the session exists)
+      try {
+        const metaRes = await apiFetch(`/workspaces/${wsId}/sessions/${sessionId}`);
+        if (metaRes.ok) {
+          setMeta(await metaRes.json());
+        } else if (metaRes.status === 404) {
+          setNotFound(true);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      // Detailed events (parsed from the .capsule binary — may be unavailable)
+      try {
         const eventsRes = await apiFetch(`/workspaces/${wsId}/sessions/${sessionId}/events`);
-        if (!eventsRes.ok) throw new Error('Failed to fetch session events or no capsule binary found');
-        
-        const eventsData = await eventsRes.json();
-        
-        // Map backend event format to frontend Step format
-        const mappedSteps: Step[] = eventsData.map((e: any, idx: number) => {
-          // The backend returns the raw JSON of the capsule event model
-          const kind = e.event_type || 'llm';
-          const title = e.name || `${kind} call`;
-          return {
-            idx,
-            kind: kind === 'llm_call' ? 'llm' : kind === 'tool_call' ? 'tool' : 'session',
-            label: `${kind} · ${e.name || 'step'}`,
-            sub: e.model || e.tool_name || '',
-            status: e.status === 'error' ? 'err' : 'ok',
-            dur: e.duration_ms ? `${(e.duration_ms / 1000).toFixed(1)}s` : '—',
-            detail: {
-              title,
-              meta: [],
-              input: e.input_str || JSON.stringify(e.input_data, null, 2),
-              output: e.output_str || JSON.stringify(e.output_data, null, 2),
-              error: e.error_message,
+        if (!eventsRes.ok) {
+          setEventsError('Step-level data is not available for this session.');
+        } else {
+          const eventsData = await eventsRes.json();
+          const asText = (v: any) => (v == null ? undefined : typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+          const mappedSteps: Step[] = eventsData.map((e: any, idx: number) => {
+            const et: string = e.event_type || 'llm';
+            const p = e.payload || {};
+            const kind: Step['kind'] =
+              et === 'llm_call' ? 'llm'
+                : et === 'tool_call' ? 'tool'
+                  : (et === 'memory_read' || et === 'memory_write') ? 'memory'
+                    : 'session';
+            const name = p.tool_name || p.model || et;
+            const isErr = et === 'error' || !!p.error || !!p.error_message;
+
+            // Inputs / outputs live in the typed payload (LLM messages / tool args, etc.)
+            const input = asText(p.messages?.length ? p.messages : p.arguments ?? p.input);
+            const output = asText(p.response ?? p.result ?? p.output ?? p.value);
+            const error = et === 'error'
+              ? (p.error_message || p.error_type || asText(p.error))
+              : (typeof p.error === 'string' ? p.error : undefined);
+
+            const meta: { k: string; v: string }[] = [];
+            if (p.provider) meta.push({ k: 'provider', v: String(p.provider) });
+            if (p.model) meta.push({ k: 'model', v: String(p.model) });
+            const usage = p.response?.usage;
+            if (usage && (usage.prompt_tokens || usage.completion_tokens)) {
+              meta.push({ k: 'tokens', v: `${usage.prompt_tokens ?? 0}→${usage.completion_tokens ?? 0}` });
             }
-          };
-        });
-        
-        setSteps(mappedSteps);
-        // Default to the first error step, or the last step if no errors
-        const errIndex = mappedSteps.findIndex(s => s.status === 'err');
-        setActive(errIndex >= 0 ? errIndex : Math.max(0, mappedSteps.length - 1));
+            if (p.tool_name) meta.push({ k: 'tool', v: String(p.tool_name) });
+
+            return {
+              idx,
+              kind,
+              label: `${et} · ${name}`,
+              sub: p.model || p.tool_name || '',
+              status: isErr ? 'err' : 'ok',
+              dur: e.duration_ms ? `${(e.duration_ms / 1000).toFixed(1)}s` : '—',
+              detail: { title: String(name), meta, input, output, error },
+            };
+          });
+          setSteps(mappedSteps);
+          const errIndex = mappedSteps.findIndex((s) => s.status === 'err');
+          setActive(errIndex >= 0 ? errIndex : Math.max(0, mappedSteps.length - 1));
+        }
       } catch (err: any) {
-        console.error(err);
-        setError(err.message);
+        setEventsError('Could not load step data for this session.');
       } finally {
         setLoading(false);
       }
@@ -272,13 +322,33 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [playing, speed]);
+  }, [playing, speed, STEPS.length]);
 
-  if (loading || STEPS.length === 0) {
+  const handleDownload = async () => {
+    if (!workspaceId) return;
+    setDownloading(true);
+    const { error } = await downloadSessionCapsule(workspaceId, sessionId);
+    if (error) alert(error);
+    setDownloading(false);
+  };
+
+  const isOk = meta ? (meta.status === 'success' || meta.status === 'completed') : true;
+
+  if (loading) {
     return (
       <DashboardShell active="sessions" title="Session" crumb={`workspace / sessions / ${sessionId}`}>
-        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
-          {error ? `Error: ${error}` : 'Loading session events...'}
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>Loading session…</div>
+      </DashboardShell>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <DashboardShell active="sessions" title="Session" crumb={`workspace / sessions / ${sessionId}`}>
+        <div className="empty">
+          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-secondary)', marginBottom: 6 }}>Session not found</div>
+          <div style={{ fontSize: 13.5 }}>It may have been deleted or expired past its retention window.</div>
+          <a className="btn btn-ghost btn-sm" href="/dashboard/sessions" style={{ marginTop: 18 }}>← Back to sessions</a>
         </div>
       </DashboardShell>
     );
@@ -290,76 +360,78 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
       <div className="page-head" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{sessionId}</span>
-          <span className="badge err"><span className="d" />failed</span>
+          <span className={`badge ${isOk ? 'ok' : 'err'}`}><span className="d" />{meta?.status ?? '—'}</span>
           {[
-            { icon: '🗂', label: 'checkout-agent' },
-            { icon: '🤖', label: 'gpt-4o' },
-            { icon: '⏱', label: '3.4s' },
-            { icon: '💸', label: '$0.0171' },
-            { icon: '🕐', label: '2m ago' },
+            { icon: '🤖', label: meta?.agent_name || '—' },
+            { icon: '⚙', label: `${meta?.step_count ?? 0} steps` },
+            { icon: '⏱', label: fmtDuration(meta?.duration_ms) },
+            { icon: '💸', label: formatUSD(meta?.total_cost_usd) },
+            { icon: '🕐', label: relativeTime(meta?.uploaded_at) },
           ].map(({ icon, label }) => (
-            <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--text-secondary)', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px 10px' }}>
+            <span key={label + icon} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--text-secondary)', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px 10px' }}>
               {icon} {label}
             </span>
           ))}
         </div>
         <div className="flex gap-8">
-          <button className="btn btn-ghost btn-sm" onClick={() => { setActive(0); setPlaying(true); }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setActive(0); setPlaying(true); }} disabled={STEPS.length === 0}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
             Replay
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => window.location.href = '/dashboard/branches'}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.4" stroke="currentColor" strokeWidth="1.8"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.8"/><circle cx="6" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.8"/><path d="M6 8.4v3.6a3 3 0 0 0 3 3h6.6" stroke="currentColor" strokeWidth="1.8"/></svg>
-            Branches
-          </button>
-          <a className="btn btn-ghost btn-sm" href={`/api/sessions/${sessionId}/export`} download>
+          <button className="btn btn-ghost btn-sm" onClick={handleDownload} disabled={downloading}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Export .capsule
-          </a>
+            {downloading ? 'Preparing…' : 'Export .capsule'}
+          </button>
         </div>
       </div>
 
       {/* Replay scrubber card */}
       <div className="card" style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
-        {/* Controls bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <button
-            onClick={playing ? pause : play}
-            style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-primary)', flexShrink: 0 }}
-          >
-            {playing ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
-            )}
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Step {active + 1}</span>
-            <span style={{ color: 'var(--text-tertiary)' }}>/ {STEPS.length}</span>
+        {STEPS.length === 0 ? (
+          <div style={{ padding: '28px 24px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+            {eventsError ?? 'No step-level events recorded for this session.'}
           </div>
-
-          <button onClick={() => setActive(Math.max(0, active - 1))} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button onClick={() => setActive(Math.min(STEPS.length - 1, active + 1))} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-
-          <div style={{ flex: 1 }} />
-
-          {/* Speed */}
-          <div className="segmented" style={{ '--seg-h': '28px' } as React.CSSProperties}>
-            {[0.5, 1, 2].map((s) => (
-              <button key={s} className={speed === s ? 'active' : ''} onClick={() => setSpeed(s)} style={{ fontSize: 11.5, padding: '0 10px' }}>
-                {s}×
+        ) : (
+          <>
+            {/* Controls bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+              <button
+                onClick={playing ? pause : play}
+                style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-primary)', flexShrink: 0 }}
+              >
+                {playing ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
+                )}
               </button>
-            ))}
-          </div>
-        </div>
 
-        {/* Timeline track */}
-        <Timeline steps={STEPS} active={active} onSeek={setActive} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Step {active + 1}</span>
+                <span style={{ color: 'var(--text-tertiary)' }}>/ {STEPS.length}</span>
+              </div>
+
+              <button onClick={() => setActive(Math.max(0, active - 1))} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <button onClick={() => setActive(Math.min(STEPS.length - 1, active + 1))} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+
+              <div style={{ flex: 1 }} />
+
+              <div className="segmented" style={{ '--seg-h': '28px' } as React.CSSProperties}>
+                {[0.5, 1, 2].map((s) => (
+                  <button key={s} className={speed === s ? 'active' : ''} onClick={() => setSpeed(s)} style={{ fontSize: 11.5, padding: '0 10px' }}>
+                    {s}×
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Timeline steps={STEPS} active={active} onSeek={setActive} />
+          </>
+        )}
       </div>
 
       {/* Three-column layout */}
@@ -370,7 +442,9 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Steps
           </div>
-          {STEPS.map((s, i) => (
+          {STEPS.length === 0 ? (
+            <div style={{ padding: '16px', fontSize: 12.5, color: 'var(--text-tertiary)' }}>No steps to show.</div>
+          ) : STEPS.map((s, i) => (
             <div
               key={i}
               onClick={() => setActive(i)}
@@ -399,32 +473,41 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
 
         {/* Detail panel */}
         <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <span style={{ padding: '3px 10px', borderRadius: 'var(--radius-sm)', background: `color-mix(in oklab, ${KIND_COLOR[step.kind]} 15%, transparent)`, color: KIND_COLOR[step.kind], fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>
-              {step.kind}
-            </span>
-            <h3 style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{step.detail.title}</h3>
-          </div>
-
-          {/* Meta chips */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-            {step.detail.meta.map(({ k, v }) => (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px 10px' }}>
-                <span style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{k}</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{v}</span>
+          {step ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+                <span style={{ padding: '3px 10px', borderRadius: 'var(--radius-sm)', background: `color-mix(in oklab, ${KIND_COLOR[step.kind]} 15%, transparent)`, color: KIND_COLOR[step.kind], fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>
+                  {step.kind}
+                </span>
+                <h3 style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{step.detail.title}</h3>
               </div>
-            ))}
-          </div>
 
-          {step.detail.error && (
-            <div style={{ marginBottom: 16, padding: '12px 14px', background: 'color-mix(in oklab, var(--error) 10%, transparent)', border: '1px solid color-mix(in oklab, var(--error) 30%, transparent)', borderRadius: 'var(--radius-sm)' }}>
-              <div style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--error)', fontWeight: 600, marginBottom: 6 }}>ERROR</div>
-              <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--error)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6 }}>{step.detail.error}</pre>
+              {step.detail.meta.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+                  {step.detail.meta.map(({ k, v }) => (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '4px 10px' }}>
+                      <span style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{k}</span>
+                      <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {step.detail.error && (
+                <div style={{ marginBottom: 16, padding: '12px 14px', background: 'color-mix(in oklab, var(--error) 10%, transparent)', border: '1px solid color-mix(in oklab, var(--error) 30%, transparent)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--error)', fontWeight: 600, marginBottom: 6 }}>ERROR</div>
+                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--error)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6 }}>{step.detail.error}</pre>
+                </div>
+              )}
+
+              {step.detail.input && <CodeBlock code={step.detail.input} label="Input" />}
+              {step.detail.output && <CodeBlock code={step.detail.output} label="Output" />}
+            </>
+          ) : (
+            <div style={{ padding: '20px 4px', color: 'var(--text-tertiary)', fontSize: 13 }}>
+              {eventsError ?? 'Select a step to inspect its input, output, and errors.'}
             </div>
           )}
-
-          {step.detail.input && <CodeBlock code={step.detail.input} label="Input" />}
-          {step.detail.output && <CodeBlock code={step.detail.output} label="Output" />}
         </div>
 
         {/* Right sidebar */}
@@ -434,13 +517,13 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Session info</div>
             {[
               { k: 'ID', v: sessionId },
-              { k: 'Project', v: 'checkout-agent' },
-              { k: 'Status', v: 'failed' },
-              { k: 'Steps', v: '8' },
-              { k: 'Duration', v: '3.4s' },
-              { k: 'Cost', v: '$0.0171' },
-              { k: 'Captured', v: '2m ago' },
-              { k: 'SDK version', v: '0.3.1' },
+              { k: 'Agent', v: meta?.agent_name || '—' },
+              { k: 'Status', v: meta?.status || '—' },
+              { k: 'Steps', v: String(meta?.step_count ?? 0) },
+              { k: 'Duration', v: fmtDuration(meta?.duration_ms) },
+              { k: 'Cost', v: formatUSD(meta?.total_cost_usd) },
+              { k: 'Captured', v: relativeTime(meta?.uploaded_at) },
+              { k: 'Agent version', v: meta?.agent_version || '—' },
             ].map(({ k, v }) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '7px 0', borderBottom: '1px solid var(--border-subtle)', gap: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{k}</span>
@@ -449,27 +532,13 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
             ))}
           </div>
 
-          {/* Branches */}
+          {/* Branches (none yet) */}
           <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Branches</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Branches</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.55 }}>
+              No branches from this session yet. Fork a step to explore an alternate path.
             </div>
-            {[
-              { id: 'br_9a2f1c', label: 'fix-schema', age: '3d ago', replays: 2 },
-              { id: 'br_2b8d44', label: 'retry-with-timeout', age: '1d ago', replays: 1 },
-            ].map((b) => (
-              <div key={b.id} style={{ padding: '9px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.4" stroke="currentColor" strokeWidth="1.8"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.8"/><circle cx="6" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.8"/><path d="M6 8.4v3.6a3 3 0 0 0 3 3h6.6" stroke="currentColor" strokeWidth="1.8"/></svg>
-                  <span style={{ fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{b.label}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{b.id}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{b.replays} replay{b.replays !== 1 ? 's' : ''} · {b.age}</span>
-                </div>
-              </div>
-            ))}
-            <a href="/dashboard/branches" style={{ display: 'block', marginTop: 10, fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', textDecoration: 'none' }}>View all branches →</a>
+            <a href="/dashboard/branches" style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', textDecoration: 'none' }}>View all branches →</a>
           </div>
         </div>
       </div>

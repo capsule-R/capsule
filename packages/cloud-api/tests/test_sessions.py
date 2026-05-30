@@ -160,3 +160,148 @@ class TestSessionDelete:
             headers=auth_headers,
         )
         assert resp2.status_code == 404
+
+
+# ── Cost / token extraction ───────────────────────────────────
+
+def _make_capsule_with_usage(
+    session_id: str,
+    *,
+    cost: float = 0.0,
+    in_tok: int = 0,
+    out_tok: int = 0,
+    status: str = "success",
+    error: dict | None = None,
+) -> bytes:
+    session_data: dict = {
+        "session_id": session_id,
+        "agent_name": "test-agent",
+        "status": status,
+        "started_at": "2024-01-01T00:00:00+00:00",
+        "ended_at": "2024-01-01T00:01:00+00:00",
+        "duration_ms": 60000,
+        "step_count": 3,
+        "total_cost_usd": cost,
+        "total_tokens": {"input": in_tok, "output": out_tok},
+    }
+    if error is not None:
+        session_data["error"] = error
+
+    tar_buf = io.BytesIO()
+    with tarfile.open(fileobj=tar_buf, mode="w") as tar:
+        b = json.dumps(session_data).encode()
+        info = tarfile.TarInfo(name="session.json")
+        info.size = len(b)
+        tar.addfile(info, io.BytesIO(b))
+    return zstd.ZstdCompressor().compress(tar_buf.getvalue())
+
+
+def _upload_capsule(client, workspace_id, auth_headers, sid, capsule_bytes):
+    metadata = json.dumps(
+        {"session_id": sid, "agent_name": "test-agent", "agent_version": "1.0.0",
+         "tags": [], "user_metadata": {}, "auto_redact": False}
+    )
+    return client.post(
+        f"/api/v1/workspaces/{workspace_id}/sessions",
+        files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+        data={"metadata": metadata},
+        headers=auth_headers,
+    )
+
+
+class TestCostTokenExtraction:
+    def test_cost_and_tokens_extracted(self, client, auth_headers, workspace_id):
+        sid = str(uuid.uuid4())
+        cap = _make_capsule_with_usage(sid, cost=0.0171, in_tok=1200, out_tok=340)
+        resp = _upload_capsule(client, workspace_id, auth_headers, sid, cap)
+        assert resp.status_code == 201, resp.json()
+        data = resp.json()
+        assert abs(data["total_cost_usd"] - 0.0171) < 1e-6
+        assert data["total_input_tokens"] == 1200
+        assert data["total_output_tokens"] == 340
+
+    def test_nested_error_extracted(self, client, auth_headers, workspace_id):
+        sid = str(uuid.uuid4())
+        cap = _make_capsule_with_usage(
+            sid, status="failed", error={"type": "ValueError", "message": "boom"}
+        )
+        resp = _upload_capsule(client, workspace_id, auth_headers, sid, cap)
+        assert resp.status_code == 201, resp.json()
+        data = resp.json()
+        assert data["status"] == "failed"
+        assert data["error_type"] == "ValueError"
+        assert data["error_message"] == "boom"
+
+
+class TestSessionStats:
+    def test_stats_empty(self, client, auth_headers):
+        resp = client.post(
+            "/api/v1/workspaces",
+            json={"name": "Stats WS", "slug": "stats-ws-empty"},
+            headers=auth_headers,
+        )
+        ws_id = resp.json()["id"]
+        resp = client.get(
+            f"/api/v1/workspaces/{ws_id}/sessions/stats", headers=auth_headers
+        )
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["failed"] == 0
+        assert data["total_cost_usd"] == 0
+        assert data["range_days"] == 30
+        assert len(data["daily"]) == 30
+        assert all(d["count"] == 0 for d in data["daily"])
+
+    def test_stats_after_uploads(self, client, auth_headers, workspace_id):
+        ok = str(uuid.uuid4())
+        bad = str(uuid.uuid4())
+        _upload_capsule(client, workspace_id, auth_headers, ok,
+                        _make_capsule_with_usage(ok, cost=0.10, in_tok=10, out_tok=5))
+        _upload_capsule(client, workspace_id, auth_headers, bad,
+                        _make_capsule_with_usage(bad, status="failed",
+                                                 error={"type": "E", "message": "m"}))
+        resp = client.get(
+            f"/api/v1/workspaces/{workspace_id}/sessions/stats?days=7",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["total"] == 2
+        assert data["failed"] == 1
+        assert abs(data["total_cost_usd"] - 0.10) < 1e-6
+        assert data["range_days"] == 7
+        assert len(data["daily"]) == 7
+        assert sum(d["count"] for d in data["daily"]) == 2
+
+    def test_stats_route_not_shadowed_by_session_id(self, client, auth_headers, workspace_id):
+        # "stats" must hit the stats endpoint, not be treated as a session id.
+        resp = client.get(
+            f"/api/v1/workspaces/{workspace_id}/sessions/stats", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert "daily" in resp.json()
+
+
+class TestSessionDownload:
+    def test_download_capsule(self, client, auth_headers, workspace_id):
+        sid = str(uuid.uuid4())
+        _upload_session(client, workspace_id, auth_headers, session_id=sid)
+        resp = client.get(
+            f"/api/v1/workspaces/{workspace_id}/sessions/{sid}/download",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert sid in resp.headers.get("content-disposition", "")
+        # Body is the raw zstd-compressed .capsule — decompresses to a tar with session.json
+        tar_bytes = zstd.ZstdDecompressor().decompress(resp.content)
+        with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+            names = tar.getnames()
+        assert any(n.endswith("session.json") for n in names)
+
+    def test_download_nonexistent(self, client, auth_headers, workspace_id):
+        resp = client.get(
+            f"/api/v1/workspaces/{workspace_id}/sessions/nope/download",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404

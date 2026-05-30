@@ -366,10 +366,10 @@ export default function GeneralSettingsPage() {
   }, []);
 
   return (
-    <DashboardShell active="general" title="General" crumb="workspace / settings / general">
+    <DashboardShell active="account" title="Account settings" crumb="workspace / settings / account">
       <div className="page-head">
         <div>
-          <h2>General settings</h2>
+          <h2>Account settings</h2>
           <p>Manage your profile, password, and account.</p>
         </div>
       </div>

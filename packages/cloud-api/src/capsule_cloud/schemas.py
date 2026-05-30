@@ -127,6 +127,9 @@ class SessionResponse(BaseModel):
     duration_ms: int | None
     status: str
     step_count: int
+    total_cost_usd: float = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
     storage_size_bytes: int
     tags: list[str]
     error_type: str | None
@@ -142,6 +145,23 @@ class SessionListResponse(BaseModel):
     items: list[SessionResponse]
     total: int
     cursor: str | None = None
+
+
+class DailyCount(BaseModel):
+    date: str  # YYYY-MM-DD (UTC)
+    count: int
+
+
+class SessionStatsResponse(BaseModel):
+    """Aggregate session metrics for the dashboard overview."""
+
+    total: int                 # all-time, non-deleted
+    failed: int                # all-time failed
+    total_cost_usd: float      # all-time sum
+    total_input_tokens: int
+    total_output_tokens: int
+    range_days: int
+    daily: list[DailyCount]    # captured-per-day over the requested range
 
 
 # ── Replays ──────────────────────────────────────────────────

@@ -18,12 +18,20 @@ from fastapi.testclient import TestClient
 def client(tmp_path):
     """Fresh FastAPI TestClient backed by an isolated SQLite file."""
     import capsule_cloud.config as cfg
+    import capsule_cloud.database as dbmod
 
     db_url = f"sqlite+aiosqlite:///{tmp_path}/test.db"
 
-    # Reset the singleton so get_settings() re-reads env vars
+    # Reset the cached singletons so this test gets its OWN settings AND its own
+    # DB engine bound to this tmp_path. Without resetting the engine/session
+    # factory, every test after the first would reuse the first test's engine
+    # (bound to a now-deleted tmp DB) and error out at setup.
     old_settings = cfg._settings
+    old_engine = dbmod._engine
+    old_factory = dbmod._session_factory
     cfg._settings = None
+    dbmod._engine = None
+    dbmod._session_factory = None
     os.environ["DATABASE_URL"] = db_url
     os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-32-bytes-xx")
 
@@ -33,9 +41,11 @@ def client(tmp_path):
         with TestClient(app, raise_server_exceptions=False) as c:
             yield c
     finally:
-        # Restore env + singleton
+        # Restore env + singletons
         del os.environ["DATABASE_URL"]
         cfg._settings = old_settings
+        dbmod._engine = old_engine
+        dbmod._session_factory = old_factory
 
 
 @pytest.fixture

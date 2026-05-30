@@ -21,9 +21,11 @@ from capsule_cloud.database import get_db
 from capsule_cloud import storage as _storage
 from capsule_cloud.models import ApiKey, Session as CloudSession, User, Workspace
 from capsule_cloud.schemas import (
+    DailyCount,
     ReplayResponse,
     SessionListResponse,
     SessionResponse,
+    SessionStatsResponse,
     SessionUploadMetadata,
     TriggerReplayRequest,
 )
@@ -138,8 +140,25 @@ async def upload_session(
     duration_ms = session_json.get("duration_ms")
     step_count = session_json.get("step_count", 0)
     status_val = session_json.get("status", "completed")
-    error_type = session_json.get("error_type")
-    error_message = session_json.get("error_message")
+
+    # Aggregate cost / token usage — the SDK writes these into session.json.
+    total_cost_usd = session_json.get("total_cost_usd") or 0
+    _tokens = session_json.get("total_tokens")
+    if isinstance(_tokens, dict):
+        total_input_tokens = _tokens.get("input") or 0
+        total_output_tokens = _tokens.get("output") or 0
+    else:
+        total_input_tokens = session_json.get("total_input_tokens") or 0
+        total_output_tokens = session_json.get("total_output_tokens") or 0
+
+    # Error details — the SDK nests them under "error"; fall back to flat keys.
+    _err = session_json.get("error")
+    if isinstance(_err, dict):
+        error_type = _err.get("type")
+        error_message = _err.get("message")
+    else:
+        error_type = session_json.get("error_type")
+        error_message = session_json.get("error_message")
 
     # Object storage key — same path on both local disk fallback and B2/R2
     storage_path = f"{workspace_id}/{meta.session_id}.capsule"
@@ -159,6 +178,9 @@ async def upload_session(
         duration_ms=duration_ms,
         status=status_val,
         step_count=step_count,
+        total_cost_usd=total_cost_usd,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
         error_type=error_type,
         error_message=error_message,
         tags_json=json.dumps(meta.tags),
@@ -251,6 +273,103 @@ async def list_sessions(
     )
 
 
+# ── Stats ─────────────────────────────────────────────────────
+# NOTE: declared BEFORE "/{session_id}" so the literal path wins routing.
+
+@router.get("/stats", response_model=SessionStatsResponse)
+async def session_stats(
+    workspace_id: str,
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SessionStatsResponse:
+    """Aggregate session metrics for the dashboard overview.
+
+    Returns all-time totals (sessions, failures, cost, tokens) plus a
+    captured-per-day series over the requested window (1–365 days).
+    """
+    await get_workspace_member(workspace_id, current_user, db)
+    days = max(1, min(days, 365))
+
+    def _scoped():
+        return select(CloudSession).where(
+            CloudSession.workspace_id == workspace_id,
+            CloudSession.deleted_at.is_(None),
+        )
+
+    total = (
+        await db.execute(select(func.count()).select_from(_scoped().subquery()))
+    ).scalar() or 0
+    failed = (
+        await db.execute(
+            select(func.count()).select_from(
+                _scoped().where(CloudSession.status == "failed").subquery()
+            )
+        )
+    ).scalar() or 0
+    cost = (
+        await db.execute(
+            select(func.coalesce(func.sum(CloudSession.total_cost_usd), 0)).where(
+                CloudSession.workspace_id == workspace_id,
+                CloudSession.deleted_at.is_(None),
+            )
+        )
+    ).scalar() or 0
+    in_tok = (
+        await db.execute(
+            select(func.coalesce(func.sum(CloudSession.total_input_tokens), 0)).where(
+                CloudSession.workspace_id == workspace_id,
+                CloudSession.deleted_at.is_(None),
+            )
+        )
+    ).scalar() or 0
+    out_tok = (
+        await db.execute(
+            select(func.coalesce(func.sum(CloudSession.total_output_tokens), 0)).where(
+                CloudSession.workspace_id == workspace_id,
+                CloudSession.deleted_at.is_(None),
+            )
+        )
+    ).scalar() or 0
+
+    # Daily buckets — DB-agnostic: fetch timestamps in range and bucket in Python.
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days - 1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    rows = (
+        await db.execute(
+            select(CloudSession.uploaded_at).where(
+                CloudSession.workspace_id == workspace_id,
+                CloudSession.deleted_at.is_(None),
+                CloudSession.uploaded_at >= start,
+            )
+        )
+    ).scalars().all()
+
+    buckets: dict[str, int] = {
+        (start + timedelta(days=i)).date().isoformat(): 0 for i in range(days)
+    }
+    for ts in rows:
+        if ts is None:
+            continue
+        key = ts.date().isoformat()
+        if key in buckets:
+            buckets[key] += 1
+
+    daily = [DailyCount(date=d, count=c) for d, c in buckets.items()]
+
+    return SessionStatsResponse(
+        total=total,
+        failed=failed,
+        total_cost_usd=float(cost or 0),
+        total_input_tokens=int(in_tok or 0),
+        total_output_tokens=int(out_tok or 0),
+        range_days=days,
+        daily=daily,
+    )
+
+
 # ── Get ───────────────────────────────────────────────────────
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -336,6 +455,42 @@ async def get_session_events(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to parse capsule archive: {str(e)}"
         )
+
+# ── Download ──────────────────────────────────────────────────
+
+@router.get("/{session_id}/download")
+async def download_session(
+    workspace_id: str,
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Stream the raw ``.capsule`` archive for a session as a file download."""
+    await get_workspace_member(workspace_id, current_user, db)
+    session = await _get_session_or_404(workspace_id, session_id, db)
+
+    try:
+        raw = await _storage.download(session.storage_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session binary data not found in storage.",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Storage error: {exc}",
+        )
+
+    return Response(
+        content=raw,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{session_id}.capsule"',
+            "Content-Length": str(len(raw)),
+        },
+    )
+
 
 # ── Replay ───────────────────────────────────────────────────
 
@@ -430,6 +585,9 @@ def _to_response(session: CloudSession) -> SessionResponse:
         duration_ms=session.duration_ms,
         status=session.status,
         step_count=session.step_count,
+        total_cost_usd=float(session.total_cost_usd or 0),
+        total_input_tokens=session.total_input_tokens or 0,
+        total_output_tokens=session.total_output_tokens or 0,
         storage_size_bytes=session.storage_size_bytes,
         tags=tags,
         error_type=session.error_type,

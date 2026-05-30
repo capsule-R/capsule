@@ -3,66 +3,70 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { DashboardShell } from '@/components/DashboardShell';
-import { apiFetch } from '@/lib/capsule';
-
-const PROJECTS: [string, string][] = [
-  ['checkout-agent', 'var(--accent)'],
-  ['support-triage', 'var(--replay)'],
-  ['billing-agent', 'var(--warn)'],
-  ['contract-review', 'var(--success)'],
-];
-const MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-3.7'];
+import {
+  apiFetch,
+  getPrimaryWorkspace,
+  downloadSessionCapsule,
+  formatUSD,
+  agentColor,
+} from '@/lib/capsule';
 
 interface Session {
-  id: string; st: [string, string]; proj: [string, string];
-  model: string; steps: number; dur: string; cost: string; when: string; costN: number;
+  id: string;
+  ok: boolean;
+  statusLabel: string;
+  agent: string;
+  steps: number;
+  dur: string;
+  cost: string;
+  costN: number;
+  when: string;
+  ts: number; // uploaded_at epoch ms, for date filtering
 }
+
+const RANGE_MS: Record<string, number> = {
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  all: Infinity,
+};
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('all');
-  const [model, setModel] = useState('');
+  const [status, setStatus] = useState<'all' | 'ok' | 'err'>('all');
+  const [agent, setAgent] = useState('');
   const [dateRange, setDateRange] = useState('30d');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const PER = 10;
 
   useEffect(() => {
     async function loadData() {
+      const ws = await getPrimaryWorkspace();
+      if (ws.status !== 'ok') { setLoading(false); return; }
+      setWorkspaceId(ws.workspace.id);
       try {
-        const wsRes = await apiFetch('/workspaces');
-        if (!wsRes.ok) throw new Error('Failed to fetch workspaces');
-        const workspaces = await wsRes.json();
-
-        if (workspaces.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        const wsId = workspaces[0].id;
-        const sessionsRes = await apiFetch(`/workspaces/${wsId}/sessions?limit=100`);
-        if (!sessionsRes.ok) throw new Error('Failed to fetch sessions');
-
-        const sessionsData = await sessionsRes.json();
-
-        // Map backend format to frontend format.
-        // Backend status values: 'success' | 'failed' | 'completed' | 'running'
-        const mapped: Session[] = sessionsData.items.map((s: any) => {
-          const isOk = s.status === 'success' || s.status === 'completed';
+        const res = await apiFetch(`/workspaces/${ws.workspace.id}/sessions?limit=100`);
+        if (!res.ok) throw new Error('Failed to fetch sessions');
+        const data = await res.json();
+        const mapped: Session[] = data.items.map((s: any) => {
+          const ok = s.status === 'success' || s.status === 'completed';
           return {
             id: s.id,
-            st: isOk ? ['ok', 'completed'] : ['err', 'failed'],
-            proj: [s.agent_name || 'default', 'var(--accent)'],
-            model: s.agent_name || '—',
+            ok,
+            statusLabel: s.status,
+            agent: s.agent_name || '—',
             steps: s.step_count || 0,
             dur: s.duration_ms ? `${(s.duration_ms / 1000).toFixed(1)}s` : '—',
-            cost: '$0.0000',
-            when: new Date(s.uploaded_at).toLocaleDateString(),
-            costN: 0,
+            cost: formatUSD(s.total_cost_usd),
+            costN: Number(s.total_cost_usd ?? 0),
+            when: s.uploaded_at ? new Date(s.uploaded_at).toLocaleDateString() : '—',
+            ts: s.uploaded_at ? new Date(s.uploaded_at).getTime() : 0,
           };
         });
-
         setSessions(mapped);
       } catch (err) {
         console.error(err);
@@ -73,20 +77,37 @@ export default function SessionsPage() {
     loadData();
   }, []);
 
-  const filtered = useMemo(() => sessions.filter((s) => {
-    if (status !== 'all' && s.st[0] !== status) return false;
-    if (model && s.model !== model) return false;
-    if (q && !s.id.includes(q)) return false;
-    return true;
-  }), [status, model, q, sessions]);
+  const agents = useMemo(
+    () => Array.from(new Set(sessions.map((s) => s.agent).filter((a) => a && a !== '—'))).sort(),
+    [sessions],
+  );
+
+  const filtered = useMemo(() => {
+    const cutoff = Date.now() - (RANGE_MS[dateRange] ?? Infinity);
+    return sessions.filter((s) => {
+      if (status === 'ok' && !s.ok) return false;
+      if (status === 'err' && s.ok) return false;
+      if (agent && s.agent !== agent) return false;
+      if (q && !s.id.toLowerCase().includes(q.toLowerCase())) return false;
+      if (isFinite(cutoff) && s.ts && s.ts < cutoff) return false;
+      return true;
+    });
+  }, [status, agent, q, dateRange, sessions]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER));
-  const slice = filtered.slice((page - 1) * PER, page * PER);
-  const okCount = filtered.filter((s) => s.st[0] === 'ok').length;
-  const errCount = filtered.filter((s) => s.st[0] === 'err').length;
+  const safePage = Math.min(page, totalPages);
+  const slice = filtered.slice((safePage - 1) * PER, safePage * PER);
+  const okCount = filtered.filter((s) => s.ok).length;
+  const errCount = filtered.filter((s) => !s.ok).length;
   const totalCost = filtered.reduce((a, s) => a + s.costN, 0);
 
-  const setStatusAndReset = (s: string) => { setStatus(s); setPage(1); };
+  const handleDownload = async (id: string) => {
+    if (!workspaceId) return;
+    setDownloading(id);
+    const { error } = await downloadSessionCapsule(workspaceId, id);
+    if (error) alert(error);
+    setDownloading(null);
+  };
 
   return (
     <DashboardShell
@@ -100,32 +121,22 @@ export default function SessionsPage() {
           <h2>Sessions</h2>
           <p>Every captured agent execution. Click a row to open the time-travel inspector.</p>
         </div>
-        <div className="flex gap-8">
-          <button className="btn btn-ghost btn-sm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M7 12h10M10 17h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
-            Sort
-          </button>
-          <button className="btn btn-ghost btn-sm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Export
-          </button>
-        </div>
       </div>
 
       {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div className="segmented">
-          {(['all','ok','err','replay'] as const).map((s) => (
-            <button key={s} className={status === s ? 'active' : ''} onClick={() => setStatusAndReset(s)}>
-              {s === 'all' ? 'All' : s === 'ok' ? 'Completed' : s === 'err' ? 'Failed' : 'Replayed'}
+          {([['all', 'All'], ['ok', 'Completed'], ['err', 'Failed']] as const).map(([s, label]) => (
+            <button key={s} className={status === s ? 'active' : ''} onClick={() => { setStatus(s); setPage(1); }}>
+              {label}
             </button>
           ))}
         </div>
         <div className="select-wrap">
-          <select className="select" value={model} onChange={(e) => { setModel(e.target.value); setPage(1); }}
+          <select className="select" value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }}
             style={{ width: 'auto', padding: '9px 34px 9px 14px' }}>
-            <option value="">All models</option>
-            {MODELS.map((m) => <option key={m}>{m}</option>)}
+            <option value="">All agents</option>
+            {agents.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div className="select-wrap">
@@ -134,6 +145,7 @@ export default function SessionsPage() {
             <option value="30d">Last 30 days</option>
             <option value="7d">Last 7 days</option>
             <option value="24h">Last 24 hours</option>
+            <option value="all">All time</option>
           </select>
         </div>
         <div style={{ flex: 1 }} />
@@ -150,7 +162,7 @@ export default function SessionsPage() {
           { label: 'Showing', val: `${filtered.length} sessions`, style: {} },
           { label: 'Completed', val: String(okCount), style: { color: 'var(--success)' } },
           { label: 'Failed', val: String(errCount), style: { color: 'var(--error)' } },
-          { label: 'Total cost', val: `$${totalCost.toFixed(2)}`, style: {} },
+          { label: 'Total cost', val: formatUSD(totalCost), style: {} },
         ].map(({ label, val, style }) => (
           <div key={label} style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>
             {label} <b style={{ display: 'block', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', marginTop: 3, ...style }}>{val}</b>
@@ -161,37 +173,46 @@ export default function SessionsPage() {
       <div className="table-wrap" style={{ borderRadius: '0 0 var(--radius) var(--radius)' }}>
         <table className="tbl">
           <thead><tr>
-            <th>Session</th><th>Project</th><th>Model</th><th>Steps</th><th>Status</th><th>Duration</th><th>Cost</th><th>Captured</th><th style={{ textAlign: 'right' }}>Actions</th>
+            <th>Session</th><th>Agent</th><th>Steps</th><th>Status</th><th>Duration</th><th>Cost</th><th>Captured</th><th style={{ textAlign: 'right' }}>Actions</th>
           </tr></thead>
           <tbody>
-            {slice.length === 0 ? (
-              <tr><td colSpan={9}><div className="empty">No sessions match these filters.</div></td></tr>
+            {loading ? (
+              <tr><td colSpan={8}><div className="empty">Loading sessions…</div></td></tr>
+            ) : sessions.length === 0 ? (
+              <tr><td colSpan={8}><div className="empty">No sessions yet. Upload your first .capsule file to get started.</div></td></tr>
+            ) : slice.length === 0 ? (
+              <tr><td colSpan={8}><div className="empty">No sessions match these filters.</div></td></tr>
             ) : slice.map((s) => (
               <tr key={s.id} className="clickable" onClick={() => window.location.href = `/dashboard/sessions/${s.id}`}>
                 <td className="cell-mono">{s.id}</td>
                 <td>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 2, background: s.proj[1], display: 'inline-block' }} />
-                    {s.proj[0]}
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: agentColor(s.agent), display: 'inline-block' }} />
+                    {s.agent}
                   </span>
                 </td>
-                <td className="cell-mono" style={{ color: 'var(--text-secondary)' }}>{s.model}</td>
                 <td className="cell-mono">{s.steps}</td>
-                <td><span className={`badge ${s.st[0]}`}><span className="d" />{s.st[1]}</span></td>
+                <td><span className={`badge ${s.ok ? 'ok' : 'err'}`}><span className="d" />{s.statusLabel}</span></td>
                 <td className="cell-mono">{s.dur}</td>
                 <td className="cell-mono">{s.cost}</td>
                 <td className="cell-sub">{s.when}</td>
                 <td>
                   <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-                    <span style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }} title="Replay">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 5 4 12l7 7M4 12h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </span>
-                    <span style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }} title="Branch">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.4" stroke="currentColor" strokeWidth="1.8"/><circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.8"/><circle cx="6" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.8"/><path d="M6 8.4v3.6a3 3 0 0 0 3 3h6.6" stroke="currentColor" strokeWidth="1.8"/></svg>
-                    </span>
-                    <span style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }} title="Download .capsule">
+                    <button
+                      onClick={() => handleDownload(s.id)}
+                      disabled={downloading === s.id}
+                      title="Download .capsule"
+                      style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: downloading === s.id ? 'wait' : 'pointer', color: 'var(--text-secondary)' }}
+                    >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 4v10m0 0l-3.5-3.5M12 14l3.5-3.5M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </span>
+                    </button>
+                    <Link
+                      href={`/dashboard/sessions/${s.id}`}
+                      title="Open inspector"
+                      style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-base)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </Link>
                   </div>
                 </td>
               </tr>
@@ -203,14 +224,14 @@ export default function SessionsPage() {
       {/* Pager */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
         <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-          {filtered.length ? `Showing ${(page - 1) * PER + 1}–${Math.min(page * PER, filtered.length)} of ${filtered.length}` : 'No results'}
+          {filtered.length ? `Showing ${(safePage - 1) * PER + 1}–${Math.min(safePage * PER, filtered.length)} of ${filtered.length}` : 'No results'}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="pg" disabled={page === 1} onClick={() => setPage(p => p - 1)} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1 }}>‹</button>
+          <button disabled={safePage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: safePage === 1 ? 'not-allowed' : 'pointer', opacity: safePage === 1 ? 0.4 : 1 }}>‹</button>
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-            <button key={p} onClick={() => setPage(p)} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: `1px solid ${p === page ? 'var(--accent)' : 'var(--border-default)'}`, background: p === page ? 'var(--accent)' : 'var(--bg-card)', color: p === page ? 'var(--text-inverse)' : 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: 'pointer' }}>{p}</button>
+            <button key={p} onClick={() => setPage(p)} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: `1px solid ${p === safePage ? 'var(--accent)' : 'var(--border-default)'}`, background: p === safePage ? 'var(--accent)' : 'var(--bg-card)', color: p === safePage ? 'var(--text-inverse)' : 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: 'pointer' }}>{p}</button>
           ))}
-          <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}>›</button>
+          <button disabled={safePage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: safePage === totalPages ? 'not-allowed' : 'pointer', opacity: safePage === totalPages ? 0.4 : 1 }}>›</button>
         </div>
       </div>
     </DashboardShell>
