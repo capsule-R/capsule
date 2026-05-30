@@ -141,7 +141,7 @@ class Settings(BaseSettings):
     )
 
     def get_cors_origins(self) -> list[str]:
-        """Parse allowed_origins into a list for CORSMiddleware."""
+        """Parse allowed_origins into a list (raw, may contain wildcards)."""
         v = (self.allowed_origins or "").strip()
         if not v:
             return [
@@ -157,6 +157,31 @@ class Settings(BaseSettings):
             except Exception:
                 pass
         return [o.strip() for o in v.split(",") if o.strip()]
+
+    def get_cors_config(self) -> dict:
+        """Build kwargs for CORSMiddleware.
+
+        FastAPI's CORSMiddleware does EXACT-string matching on allow_origins —
+        it does NOT expand wildcards like ``https://*.vercel.app``. Any origin
+        containing a ``*`` is therefore compiled into ``allow_origin_regex``
+        instead, so deploy-preview / subdomain URLs actually match.
+        """
+        import re
+
+        exact: list[str] = []
+        regexes: list[str] = []
+        for origin in self.get_cors_origins():
+            if "*" in origin:
+                # Escape everything, then turn the escaped \* back into .*
+                pattern = re.escape(origin).replace(r"\*", r"[^.]+")
+                regexes.append(pattern)
+            else:
+                exact.append(origin)
+
+        cfg: dict = {"allow_origins": exact}
+        if regexes:
+            cfg["allow_origin_regex"] = "^(" + "|".join(regexes) + ")$"
+        return cfg
 
 
 _settings: Settings | None = None
