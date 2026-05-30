@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from capsule_cloud.config import get_settings
+
+logger = structlog.get_logger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -97,8 +100,38 @@ async def get_db():
             await session.close()
 
 
-async def create_tables() -> None:
-    """Create all tables (used in dev / tests)."""
+async def create_tables(retries: int = 5, delay: float = 2.0) -> None:
+    """Create all tables, retrying while Postgres finishes booting.
+
+    On Railway the DB plugin can refuse connections for a few seconds after
+    the app container starts. We retry with a short backoff so a cold database
+    can't crash the deploy. After the final attempt we re-raise so a genuinely
+    misconfigured DATABASE_URL still surfaces loudly.
+    """
+    import asyncio
+
     engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            return
+        except Exception as exc:  # noqa: BLE001 — retry any connection-time error
+            last_exc = exc
+            if attempt < retries:
+                wait = delay * attempt
+                logger.warning(
+                    "create_tables.retry",
+                    attempt=attempt,
+                    of=retries,
+                    wait_seconds=wait,
+                    error=str(exc),
+                )
+                await asyncio.sleep(wait)
+    raise RuntimeError(
+        f"Could not connect to the database after {retries} attempts. "
+        "Verify DATABASE_URL points to a reachable Postgres "
+        "(on Railway it should be exactly '${{Postgres.DATABASE_URL}}'). "
+        f"Last error: {last_exc}"
+    ) from last_exc
