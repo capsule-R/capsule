@@ -109,9 +109,10 @@ class MemberResponse(BaseModel):
 # ── Sessions ─────────────────────────────────────────────────
 
 class SessionUploadMetadata(BaseModel):
-    session_id: str
-    agent_name: str
-    agent_version: str | None = None
+    # Pattern restricts path traversal and header-injection characters
+    session_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_\-]+$")
+    agent_name: str = Field(min_length=1, max_length=200)
+    agent_version: str | None = Field(default=None, max_length=100)
     tags: list[str] = Field(default_factory=list)
     user_metadata: dict[str, Any] = Field(default_factory=dict)
     auto_redact: bool = False

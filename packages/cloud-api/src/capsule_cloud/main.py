@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app() -> FastAPI:
     settings = get_settings()
 
+    _in_dev = settings.environment == "development"
     app = FastAPI(
         title="Capsule Cloud API",
         version=__version__,
@@ -45,9 +46,11 @@ def create_app() -> FastAPI:
             "REST API for the Capsule deterministic replay & time-travel debugger. "
             "Upload, browse, and replay AI agent sessions from any provider."
         ),
-        docs_url="/api/v1/docs",
-        redoc_url="/api/v1/redoc",
-        openapi_url="/api/v1/openapi.json",
+        # Disable interactive docs in non-development environments to avoid
+        # exposing the full API schema to unauthenticated users in production.
+        docs_url="/api/v1/docs" if _in_dev else None,
+        redoc_url="/api/v1/redoc" if _in_dev else None,
+        openapi_url="/api/v1/openapi.json" if _in_dev else None,
         lifespan=lifespan,
     )
 
@@ -59,6 +62,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         **settings.get_cors_config(),
     )
+
+    # ── Security response headers ─────────────────────────────
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-XSS-Protection", "1; mode=block")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        return response
 
     # ── Request-ID + latency logging middleware ───────────────
     @app.middleware("http")

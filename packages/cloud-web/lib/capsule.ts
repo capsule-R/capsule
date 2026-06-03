@@ -42,9 +42,10 @@ export function getToken(): string | null {
   return getCookie(TOKEN_COOKIE);
 }
 
-export function setTokens(access: string, refresh: string): void {
+export function setTokens(access: string, refresh: string, accessExpiresIn = 3600): void {
+  // Access token cookie expires with the token itself; refresh token lives 30 days.
   const month = 60 * 60 * 24 * 30;
-  setCookie(TOKEN_COOKIE,   access,  month);
+  setCookie(TOKEN_COOKIE,   access,  accessExpiresIn);
   setCookie(REFRESH_COOKIE, refresh, month);
 }
 
@@ -86,7 +87,7 @@ export async function login(
     });
     const json = await res.json();
     if (!res.ok) return { error: json.detail ?? 'Login failed' };
-    setTokens(json.access_token, json.refresh_token);
+    setTokens(json.access_token, json.refresh_token, json.expires_in);
     return { data: json as TokenResponse };
   } catch {
     return { error: 'Network error — is the API running?' };
@@ -106,7 +107,7 @@ export async function signup(
     });
     const json = await res.json();
     if (!res.ok) return { error: json.detail ?? 'Signup failed' };
-    setTokens(json.access_token, json.refresh_token);
+    setTokens(json.access_token, json.refresh_token, json.expires_in);
     return { data: json as TokenResponse };
   } catch {
     return { error: 'Network error — is the API running?' };

@@ -18,7 +18,12 @@ if TYPE_CHECKING:
 
 
 def _local_path(key: str) -> str:
-    return os.path.join(os.getcwd(), "data", "storage", key)
+    base = os.path.realpath(os.path.join(os.getcwd(), "data", "storage"))
+    path = os.path.realpath(os.path.join(base, key))
+    # Guard against path traversal — e.g. key = "../../etc/passwd"
+    if not (path == base or path.startswith(base + os.sep)):
+        raise ValueError(f"Unsafe storage key rejected: {key!r}")
+    return path
 
 
 def _local_write(key: str, data: bytes) -> None:

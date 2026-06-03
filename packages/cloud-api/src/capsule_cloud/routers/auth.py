@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from capsule_cloud.auth import (
     _create_token,
     _decode_token,
+    _decode_token_payload,
     create_access_token,
     create_refresh_token,
     get_current_user,
@@ -19,6 +20,12 @@ from capsule_cloud.auth import (
     hash_password,
     verify_password,
 )
+
+# In-memory set of consumed password-reset JTIs.
+# Prevents a reset link from being replayed within its 1-hour window.
+# NOTE: This is per-process. Multi-worker deployments should replace this
+#       with a shared store (Redis SETEX, or a DB-backed blocklist table).
+_used_reset_jtis: set[str] = set()
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud.models import User, Workspace, WorkspaceMember
@@ -228,21 +235,30 @@ async def reset_password(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Validate a password-reset token and update the user's password."""
-    # Decode and validate the JWT reset token
+    _bad_token = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired reset token",
+    )
+    # Decode and validate the JWT reset token, extracting full payload for jti check
     try:
-        user_id = _decode_token(body.token, "password_reset")
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset token",
-        )
+        payload = _decode_token_payload(body.token, "password_reset")
+        user_id: str = payload["sub"]
+        jti: str | None = payload.get("jti")
+    except HTTPException:
+        raise _bad_token
+
+    # Enforce single-use: reject if this token's jti has already been consumed
+    if jti:
+        if jti in _used_reset_jtis:
+            raise _bad_token
+        _used_reset_jtis.add(jti)
 
     result = await db.execute(
         select(User).where(User.id == user_id, User.deleted_at.is_(None))
     )
     user = result.scalars().first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid reset token")
+        raise _bad_token
 
     user.hashed_password = hash_password(body.new_password)
     await db.commit()

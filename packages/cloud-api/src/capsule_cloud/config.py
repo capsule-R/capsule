@@ -135,6 +135,17 @@ class Settings(BaseSettings):
         return f"-----BEGIN {label}-----\n{wrapped}\n-----END {label}-----\n"
 
     @model_validator(mode="after")
+    def ensure_secret_key(self) -> "Settings":
+        """Reject the well-known default secret_key in non-development environments."""
+        default = "change-me-in-production-use-32-random-bytes"
+        if self.secret_key == default and self.environment != "development":
+            raise ValueError(
+                "SECRET_KEY must be changed from the default in production. "
+                "Set SECRET_KEY to a cryptographically random 32+ byte string."
+            )
+        return self
+
+    @model_validator(mode="after")
     def ensure_jwt_keypair(self) -> "Settings":
         """Auto-generate ephemeral Ed25519 keys in development if none are configured."""
         if not self.jwt_private_key or not self.jwt_public_key:
@@ -179,12 +190,11 @@ class Settings(BaseSettings):
 
     # CORS — plain str so pydantic-settings never tries to json.loads() it.
     # Accepts comma-separated origins or a JSON array string.
-    # Leave empty → safe defaults are used.
+    # Wildcards like https://*.vercel.app allow ANY app on that platform —
+    # set ALLOWED_ORIGINS explicitly in production with only your own domains.
     allowed_origins: str = (
         "http://localhost:3000,"
-        "https://capsule.dev,"
-        "https://*.vercel.app,"
-        "https://*.railway.app"
+        "https://capsule.dev"
     )
 
     def get_cors_origins(self) -> list[str]:
@@ -194,8 +204,6 @@ class Settings(BaseSettings):
             return [
                 "http://localhost:3000",
                 "https://capsule.dev",
-                "https://*.vercel.app",
-                "https://*.railway.app",
             ]
         if v.startswith("["):
             import json

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -88,6 +89,7 @@ def _create_token(
             "iat": now,
             "exp": now + expires_delta,
             "type": token_type,
+            "jti": str(uuid.uuid4()),  # unique ID enabling per-token revocation
         }
     )
     return pyjwt.encode(payload, _get_private_key(), algorithm="EdDSA")
@@ -111,8 +113,8 @@ def create_refresh_token(user_id: str) -> str:
     )
 
 
-def _decode_token(token: str, expected_type: str) -> str:
-    """Decode an EdDSA JWT and return the user_id (sub claim)."""
+def _decode_token_payload(token: str, expected_type: str) -> dict[str, Any]:
+    """Decode an EdDSA JWT and return the full validated payload."""
     try:
         payload = pyjwt.decode(
             token,
@@ -134,13 +136,17 @@ def _decode_token(token: str, expected_type: str) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Wrong token type",
         )
-    user_id: str | None = payload.get("sub")
-    if not user_id:
+    if not payload.get("sub"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing subject",
         )
-    return user_id
+    return payload
+
+
+def _decode_token(token: str, expected_type: str) -> str:
+    """Decode an EdDSA JWT and return the user_id (sub claim)."""
+    return _decode_token_payload(token, expected_type)["sub"]
 
 
 # ── FastAPI dependencies ──────────────────────────────────────

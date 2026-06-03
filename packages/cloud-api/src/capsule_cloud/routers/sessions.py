@@ -5,15 +5,21 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import tarfile
 from datetime import datetime, timedelta, timezone
 
 import ulid
 import zstandard as zstd
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# Hard cap on decompressed archive size to prevent decompression bombs.
+_MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
+# Per-member size limit when reading individual tar entries into memory.
+_MAX_TAR_MEMBER_BYTES = 50 * 1024 * 1024  # 50 MB
 
 from capsule_cloud.auth import authenticate_api_key, get_current_user, get_workspace_member
 from capsule_cloud.config import get_settings
@@ -50,17 +56,6 @@ async def _get_workspace_or_404(workspace_id: str, db: AsyncSession) -> Workspac
     if ws is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
     return ws
-
-
-async def _resolve_user_and_workspace(
-    workspace_id: str,
-    credentials_header: str | None,
-    db: AsyncSession,
-    current_user: User | None,
-) -> tuple[User, Workspace]:
-    """Accept either JWT user or API-key user."""
-    ws = await _get_workspace_or_404(workspace_id, db)
-    return current_user, ws  # type: ignore[return-value]
 
 
 # ── Upload ────────────────────────────────────────────────────
@@ -112,10 +107,12 @@ async def upload_session(
     session_json: dict = {}
     try:
         dctx = zstd.ZstdDecompressor()
-        raw_tar = dctx.decompress(raw)
+        raw_tar = dctx.decompress(raw, max_length=_MAX_DECOMPRESSED_BYTES)
         with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tar:
             for member in tar.getmembers():
                 if member.name.endswith("session.json"):
+                    if member.size > _MAX_TAR_MEMBER_BYTES:
+                        break
                     f = tar.extractfile(member)
                     if f:
                         session_json = json.loads(f.read())
@@ -218,7 +215,7 @@ async def upload_session(
 @router.get("", response_model=SessionListResponse)
 async def list_sessions(
     workspace_id: str,
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = None,
     agent_name: str | None = None,
     status: str | None = None,
@@ -436,17 +433,19 @@ async def get_session_events(
 
     try:
         dctx = zstd.ZstdDecompressor()
-        raw_tar = dctx.decompress(raw)
-        
+        raw_tar = dctx.decompress(raw, max_length=_MAX_DECOMPRESSED_BYTES)
+
         events = []
         with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tar:
             for member in tar.getmembers():
                 if member.name.startswith("events/") and member.name.endswith(".json"):
+                    if member.size > _MAX_TAR_MEMBER_BYTES:
+                        continue
                     extracted_file = tar.extractfile(member)
                     if extracted_file:
                         event_data = json.loads(extracted_file.read().decode("utf-8"))
                         events.append((member.name, event_data))
-                        
+
         # Sort by filename which contains the index (e.g. 0001-tool_call.json)
         events.sort(key=lambda x: x[0])
         return [e[1] for e in events]
@@ -482,11 +481,13 @@ async def download_session(
             detail=f"Storage error: {exc}",
         )
 
+    # Strip any characters that could break the Content-Disposition header value
+    safe_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', session_id)
     return Response(
         content=raw,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{session_id}.capsule"',
+            "Content-Disposition": f'attachment; filename="{safe_id}.capsule"',
             "Content-Length": str(len(raw)),
         },
     )
