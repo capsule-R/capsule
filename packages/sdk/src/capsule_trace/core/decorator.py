@@ -1,4 +1,4 @@
-"""@capsule.trace decorator — wraps a function or coroutine in a Session."""
+﻿"""@capsule.trace decorator — wraps a function or coroutine in a Session."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import functools
 import os
 from typing import Any, Callable, TypeVar
 
-from capsule.core.session import Session
+from capsule_trace.core.session import Session
 
 F = TypeVar("F", bound=Callable[..., Any])
 

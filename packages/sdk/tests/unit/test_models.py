@@ -1,8 +1,8 @@
-"""Unit tests for Pydantic data models."""
+﻿"""Unit tests for Pydantic data models."""
 
 from __future__ import annotations
 
-from capsule.core.models import (
+from capsule_trace.core.models import (
     CapsuleManifest,
     Event,
     EventType,

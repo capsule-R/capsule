@@ -1,4 +1,4 @@
-"""Unit tests for Session and @trace decorator."""
+﻿"""Unit tests for Session and @trace decorator."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from capsule.core.decorator import trace
-from capsule.core.models import EventType, SessionStatus
-from capsule.core.session import Session
-from capsule.storage.sqlite import SQLiteBackend
+from capsule_trace.core.decorator import trace
+from capsule_trace.core.models import EventType, SessionStatus
+from capsule_trace.core.session import Session
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 
 @pytest.fixture()
@@ -146,7 +146,7 @@ def test_trace_preserves_return_value_on_exception(in_memory_backend):
 
 
 def test_capture_event_increments_step_count(in_memory_backend):
-    from capsule.core.models import Event, EventType
+    from capsule_trace.core.models import Event, EventType
 
     with Session(agent_name="event-test", storage_backend=in_memory_backend) as s:
         session_id = s.session_id

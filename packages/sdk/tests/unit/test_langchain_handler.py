@@ -1,4 +1,4 @@
-"""Unit tests for the LangChain callback handler."""
+﻿"""Unit tests for the LangChain callback handler."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from uuid import uuid4
 
 import pytest
 
-from capsule.core.models import EventType
-from capsule.core.session import Session
-from capsule.storage.sqlite import SQLiteBackend
+from capsule_trace.core.models import EventType
+from capsule_trace.core.session import Session
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 
 @pytest.fixture()
@@ -30,7 +30,7 @@ def _make_llm_result(content: str = "Hello", model: str = "gpt-4o") -> MagicMock
 
 
 def test_callback_handler_captures_llm_call(backend):
-    from capsule.integrations.langchain import CapsuleCallbackHandler
+    from capsule_trace.integrations.langchain import CapsuleCallbackHandler
 
     handler = CapsuleCallbackHandler()
     run_id = uuid4()
@@ -50,7 +50,7 @@ def test_callback_handler_captures_llm_call(backend):
 
 
 def test_callback_handler_captures_tool_call(backend):
-    from capsule.integrations.langchain import CapsuleCallbackHandler
+    from capsule_trace.integrations.langchain import CapsuleCallbackHandler
 
     handler = CapsuleCallbackHandler()
     run_id = uuid4()
@@ -67,7 +67,7 @@ def test_callback_handler_captures_tool_call(backend):
 
 def test_callback_handler_no_session_no_error(backend):
     """Handler gracefully does nothing when no session is active."""
-    from capsule.integrations.langchain import CapsuleCallbackHandler
+    from capsule_trace.integrations.langchain import CapsuleCallbackHandler
 
     handler = CapsuleCallbackHandler()
     run_id = uuid4()
@@ -77,7 +77,7 @@ def test_callback_handler_no_session_no_error(backend):
 
 
 def test_callback_handler_error_cleans_up(backend):
-    from capsule.integrations.langchain import CapsuleCallbackHandler
+    from capsule_trace.integrations.langchain import CapsuleCallbackHandler
 
     handler = CapsuleCallbackHandler()
     run_id = uuid4()
@@ -88,7 +88,7 @@ def test_callback_handler_error_cleans_up(backend):
 
 
 def test_multiple_llm_calls_sequential(backend):
-    from capsule.integrations.langchain import CapsuleCallbackHandler
+    from capsule_trace.integrations.langchain import CapsuleCallbackHandler
 
     handler = CapsuleCallbackHandler()
 

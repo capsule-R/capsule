@@ -1,4 +1,4 @@
-"""Unit tests for .capsule file export and import roundtrip."""
+﻿"""Unit tests for .capsule file export and import roundtrip."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 import zstandard as zstd
 
-from capsule.core.models import Event, EventType, SessionMetadata, SessionStatus
-from capsule.storage.sqlite import SQLiteBackend
+from capsule_trace.core.models import Event, EventType, SessionMetadata, SessionStatus
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 
 @pytest.fixture()
@@ -44,7 +44,7 @@ def backend_with_session(tmp_path):
 
 
 def test_export_creates_file(tmp_path, backend_with_session):
-    from capsule.core.exporter import export_capsule
+    from capsule_trace.core.exporter import export_capsule
 
     output = tmp_path / "output.capsule"
     result = export_capsule("ses_test001", backend_with_session, output)
@@ -54,7 +54,7 @@ def test_export_creates_file(tmp_path, backend_with_session):
 
 
 def test_export_is_valid_zstd(tmp_path, backend_with_session):
-    from capsule.core.exporter import export_capsule
+    from capsule_trace.core.exporter import export_capsule
 
     output = tmp_path / "output.capsule"
     export_capsule("ses_test001", backend_with_session, output)
@@ -65,7 +65,7 @@ def test_export_is_valid_zstd(tmp_path, backend_with_session):
 
 
 def test_export_contains_required_files(tmp_path, backend_with_session):
-    from capsule.core.exporter import export_capsule
+    from capsule_trace.core.exporter import export_capsule
 
     output = tmp_path / "output.capsule"
     export_capsule("ses_test001", backend_with_session, output)
@@ -83,7 +83,7 @@ def test_export_contains_required_files(tmp_path, backend_with_session):
 
 
 def test_export_manifest_has_integrity_hashes(tmp_path, backend_with_session):
-    from capsule.core.exporter import export_capsule
+    from capsule_trace.core.exporter import export_capsule
 
     output = tmp_path / "output.capsule"
     export_capsule("ses_test001", backend_with_session, output)
@@ -102,8 +102,8 @@ def test_export_manifest_has_integrity_hashes(tmp_path, backend_with_session):
 
 
 def test_import_roundtrip(tmp_path, backend_with_session):
-    from capsule.core.exporter import export_capsule
-    from capsule.core.importer import import_capsule_file
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.core.importer import import_capsule_file
 
     output = tmp_path / "roundtrip.capsule"
     export_capsule("ses_test001", backend_with_session, output)

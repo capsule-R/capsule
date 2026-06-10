@@ -1,4 +1,4 @@
-"""ContextVar that activates cassette replay mode.
+﻿"""ContextVar that activates cassette replay mode.
 
 When replay mode is active, integration patches consult the CassetteStore
 instead of making live API calls. Zero overhead when inactive.
@@ -10,7 +10,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from capsule.replay.cassette import CassetteStore
+    from capsule_trace.replay.cassette import CassetteStore
 
 _replay_store: ContextVar["CassetteStore | None"] = ContextVar(
     "capsule_replay_store", default=None

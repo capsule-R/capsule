@@ -1,4 +1,4 @@
-"""OpenAI SDK integration — patches chat.completions and responses API."""
+﻿"""OpenAI SDK integration — patches chat.completions and responses API."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import time
 import uuid
 from typing import Any
 
-from capsule.core.context import get_current_session
-from capsule.core.models import (
+from capsule_trace.core.context import get_current_session
+from capsule_trace.core.models import (
     EventType,
     LLMCallPayload,
     LLMMessage,
@@ -46,7 +46,7 @@ def _patch_sync_client(openai: Any) -> None:
     @functools.wraps(original)
     def patched_create(self: Any, **kwargs: Any) -> Any:
         # Replay-mode: return cassette instead of hitting the API
-        from capsule.replay.mode import get_replay_store
+        from capsule_trace.replay.mode import get_replay_store
         store = get_replay_store()
         if store is not None:
             return _cassette_response_openai(store, kwargs)
@@ -77,7 +77,7 @@ def _patch_async_client(openai: Any) -> None:
 
     @functools.wraps(original)
     async def patched_async_create(self: Any, **kwargs: Any) -> Any:
-        from capsule.replay.mode import get_replay_store
+        from capsule_trace.replay.mode import get_replay_store
         store = get_replay_store()
         if store is not None:
             return _cassette_response_openai(store, kwargs)
@@ -192,7 +192,7 @@ def _cassette_response_openai(store: Any, kwargs: dict[str, Any]) -> Any:
 
 
 def _emit_event(session: Any, payload: LLMCallPayload, duration_ms: float) -> None:
-    from capsule.core.models import Event
+    from capsule_trace.core.models import Event
 
     event = Event(
         session_id=session.session_id,

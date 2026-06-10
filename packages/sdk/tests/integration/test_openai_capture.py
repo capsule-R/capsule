@@ -1,4 +1,4 @@
-"""Integration test — OpenAI SDK capture with mocked responses."""
+﻿"""Integration test — OpenAI SDK capture with mocked responses."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from capsule.core.models import EventType, SessionStatus
-from capsule.core.session import Session
-from capsule.integrations.openai import patch as patch_openai
-from capsule.storage.sqlite import SQLiteBackend
+from capsule_trace.core.models import EventType, SessionStatus
+from capsule_trace.core.session import Session
+from capsule_trace.integrations.openai import patch as patch_openai
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +37,7 @@ def test_openai_llm_call_captured(tmp_path, backend):
         session_id = s.session_id
 
         # Simulate what the patched method does
-        from capsule.core.models import Event, LLMCallPayload, LLMMessage, LLMResponse, LLMUsage
+        from capsule_trace.core.models import Event, LLMCallPayload, LLMMessage, LLMResponse, LLMUsage
 
         payload = LLMCallPayload(
             provider="openai",
@@ -69,7 +69,7 @@ def test_openai_llm_call_captured(tmp_path, backend):
 
 def test_multiple_llm_calls_captured(tmp_path, backend):
     """Multiple LLM calls in sequence should all be captured with correct step indices."""
-    from capsule.core.models import Event, LLMCallPayload, LLMMessage
+    from capsule_trace.core.models import Event, LLMCallPayload, LLMMessage
 
     with Session(agent_name="multi-call", storage_backend=backend) as s:
         session_id = s.session_id

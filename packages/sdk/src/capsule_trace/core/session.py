@@ -1,4 +1,4 @@
-"""Session — represents a single agent execution being captured."""
+﻿"""Session — represents a single agent execution being captured."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from typing import Any
 
 import ulid  # type: ignore[import-untyped]
 
-from capsule.core.context import get_current_session, set_current_session
-from capsule.core.models import (
+from capsule_trace.core.context import get_current_session, set_current_session
+from capsule_trace.core.models import (
     Event,
     SessionError,
     SessionMetadata,
@@ -38,7 +38,7 @@ class Session:
         auto_upload: bool = False,
         storage_backend: Any | None = None,
     ) -> None:
-        from capsule.storage.sqlite import SQLiteBackend
+        from capsule_trace.storage.sqlite import SQLiteBackend
 
         self.session_id = str(ulid.new())
         self._metadata = SessionMetadata(
@@ -128,7 +128,7 @@ class Session:
     def _try_upload(self) -> None:
         """Best-effort cloud upload — never raises."""
         try:
-            from capsule.cloud.uploader import upload_session
+            from capsule_trace.cloud.uploader import upload_session
 
             upload_session(self.session_id)
         except Exception:
@@ -138,7 +138,7 @@ class Session:
 
     def export(self, output_path: Path | str) -> Path:
         """Export this session as a .capsule file."""
-        from capsule.core.exporter import export_capsule
+        from capsule_trace.core.exporter import export_capsule
 
         return export_capsule(self.session_id, self._storage, Path(output_path))
 

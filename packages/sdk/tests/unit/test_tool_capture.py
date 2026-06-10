@@ -1,13 +1,13 @@
-"""Unit tests for tool call capture."""
+﻿"""Unit tests for tool call capture."""
 
 from __future__ import annotations
 
 import pytest
 
-from capsule.core.models import EventType, SessionStatus
-from capsule.core.session import Session
-from capsule.integrations.tools import capture_tool_call
-from capsule.storage.sqlite import SQLiteBackend
+from capsule_trace.core.models import EventType, SessionStatus
+from capsule_trace.core.session import Session
+from capsule_trace.integrations.tools import capture_tool_call
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 
 @pytest.fixture()

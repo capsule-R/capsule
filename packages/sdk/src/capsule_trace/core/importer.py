@@ -1,4 +1,4 @@
-"""Import a .capsule file back into the local SQLite store."""
+﻿"""Import a .capsule file back into the local SQLite store."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import zstandard as zstd
 
-from capsule.core.models import (
+from capsule_trace.core.models import (
     CapsuleManifest,
     Event,
     EventType,
@@ -20,7 +20,7 @@ from capsule.core.models import (
 
 def import_capsule_file(path: Path) -> str:
     """Decompress, verify, and load a .capsule file into the default SQLite store."""
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     backend = SQLiteBackend.default()
 

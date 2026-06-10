@@ -1,4 +1,4 @@
-"""Hypothesis property-based tests — prove replay determinism across random sessions."""
+﻿"""Hypothesis property-based tests — prove replay determinism across random sessions."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import zstandard as zstd
 from hypothesis import given, settings, HealthCheck
 from hypothesis import strategies as st
 
-from capsule.replay.engine import Replayer
+from capsule_trace.replay.engine import Replayer
 
 
 # ──────────────────────────────────────────────────────────────

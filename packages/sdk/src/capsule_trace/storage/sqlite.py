@@ -1,4 +1,4 @@
-"""SQLite storage backend — default local store at ~/.capsule/sessions.db."""
+﻿"""SQLite storage backend — default local store at ~/.capsule/sessions.db."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session as OrmSession, sessionmaker
 
-from capsule.core.models import Event, EventType, SessionMetadata, SessionStatus
+from capsule_trace.core.models import Event, EventType, SessionMetadata, SessionStatus
 
 logger = logging.getLogger("capsule.storage")
 
@@ -244,7 +244,7 @@ class SQLiteBackend:
 
         error = None
         if row.error_json:  # type: ignore[truthy-bool]
-            from capsule.core.models import SessionError
+            from capsule_trace.core.models import SessionError
 
             error = SessionError(**json.loads(row.error_json))  # type: ignore[arg-type]
 

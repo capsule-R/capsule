@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "capsule-sdk"
+name = "capsule-trace"
 version = "0.1.0"
 description = "Deterministic replay & time-travel debugger for AI agents"
 readme = "README.md"
@@ -55,7 +55,7 @@ dev = [
 ]
 
 [project.scripts]
-capsule-sdk = "capsule.cli:main"
+capsule-trace = "capsule_trace.cli:main"
 
 [project.urls]
 Homepage = "https://capsule.dev"
@@ -65,7 +65,7 @@ Issues = "https://github.com/capsule-dev/capsule/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["capsule*"]
+include = ["capsule_trace*"]
 
 [tool.ruff]
 line-length = 100
@@ -86,7 +86,7 @@ testpaths = ["tests"]
 addopts = "-v --tb=short"
 
 [tool.coverage.run]
-source = ["capsule"]
+source = ["capsule_trace"]
 branch = true
 
 [tool.coverage.report]

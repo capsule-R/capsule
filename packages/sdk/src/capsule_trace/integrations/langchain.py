@@ -1,10 +1,10 @@
-"""LangChain callback handler — integrates Capsule capture into any LangChain chain or agent.
+﻿"""LangChain callback handler — integrates Capsule capture into any LangChain chain or agent.
 
 Usage::
 
     from langchain_openai import ChatOpenAI
-    from capsule.integrations.langchain import CapsuleCallbackHandler
-    import capsule
+    from capsule_trace.integrations.langchain import CapsuleCallbackHandler
+    import capsule_trace
 
     @capsule.trace(agent_name="langchain-agent")
     def run():
@@ -20,8 +20,8 @@ import uuid
 from typing import Any, Union
 from uuid import UUID
 
-from capsule.core.context import get_current_session
-from capsule.core.models import (
+from capsule_trace.core.context import get_current_session
+from capsule_trace.core.models import (
     Event,
     EventType,
     LLMCallPayload,
@@ -57,7 +57,7 @@ class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
     def __init__(self) -> None:
         if not _LANGCHAIN_AVAILABLE:
             raise ImportError(
-                "langchain-core is required. Install with: pip install capsule-sdk[langchain]"
+                "langchain-core is required. Install with: pip install capsule-trace[langchain]"
             )
         super().__init__()
         self._call_start_times: dict[UUID, float] = {}

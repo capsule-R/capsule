@@ -1,4 +1,4 @@
-"""Pure-Python replay engine.
+﻿"""Pure-Python replay engine.
 
 Loads a .capsule archive and replays it deterministically by serving
 stored cassette responses instead of hitting live LLM providers.
@@ -36,9 +36,9 @@ from typing import Any
 
 import zstandard as zstd
 
-from capsule.core.models import Event, EventType, SessionMetadata
-from capsule.replay.cassette import CassetteStore
-from capsule.replay.mode import set_replay_store
+from capsule_trace.core.models import Event, EventType, SessionMetadata
+from capsule_trace.replay.cassette import CassetteStore
+from capsule_trace.replay.mode import set_replay_store
 
 logger = logging.getLogger("capsule.replay")
 
@@ -196,8 +196,8 @@ class Replayer:
     @classmethod
     def from_session_id(cls, session_id: str) -> "Replayer":
         """Load from the local SQLite store → export → load."""
-        from capsule.core.exporter import export_capsule
-        from capsule.storage.sqlite import SQLiteBackend
+        from capsule_trace.core.exporter import export_capsule
+        from capsule_trace.storage.sqlite import SQLiteBackend
         import tempfile
 
         backend = SQLiteBackend.default()

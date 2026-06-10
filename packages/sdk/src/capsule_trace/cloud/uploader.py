@@ -1,4 +1,4 @@
-"""Upload a local session to the Capsule Cloud API."""
+﻿"""Upload a local session to the Capsule Cloud API."""
 
 from __future__ import annotations
 
@@ -53,8 +53,8 @@ def upload_session(
     except ImportError as exc:
         raise ImportError("httpx is required for cloud uploads: pip install httpx") from exc
 
-    from capsule.core.exporter import export_capsule
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     config = _get_cloud_config()
     if not config["api_key"]:

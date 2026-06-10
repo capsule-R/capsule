@@ -1,4 +1,4 @@
-"""Unit tests for the Capsule replay engine."""
+﻿"""Unit tests for the Capsule replay engine."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 import zstandard as zstd
 
-from capsule.core.models import Event, EventType, SessionMetadata, SessionStatus
-from capsule.replay.cassette import CassetteStore
-from capsule.replay.engine import Replayer, ReplayResult
-from capsule.storage.sqlite import SQLiteBackend
+from capsule_trace.core.models import Event, EventType, SessionMetadata, SessionStatus
+from capsule_trace.replay.cassette import CassetteStore
+from capsule_trace.replay.engine import Replayer, ReplayResult
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 
 # ──────────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ def test_diff_different_step_counts():
 
 def test_replayer_from_session_id(tmp_path, monkeypatch):
     """Verify we can export from SQLite and reload via Replayer.from_session_id."""
-    from capsule.core.session import Session
+    from capsule_trace.core.session import Session
 
     backend = SQLiteBackend(tmp_path / "test.db")
 
@@ -303,7 +303,7 @@ def test_replayer_from_session_id(tmp_path, monkeypatch):
 
     with Session(agent_name="roundtrip", storage_backend=backend) as s:
         sid = s.session_id
-        from capsule.core.models import Event, LLMCallPayload, LLMMessage
+        from capsule_trace.core.models import Event, LLMCallPayload, LLMMessage
         ev = Event(
             session_id=sid,
             step_index=0,
@@ -317,7 +317,7 @@ def test_replayer_from_session_id(tmp_path, monkeypatch):
         )
         s.capture_event(ev)
 
-    from capsule.core.exporter import export_capsule
+    from capsule_trace.core.exporter import export_capsule
     out = tmp_path / "test.capsule"
     export_capsule(sid, backend, out)
 

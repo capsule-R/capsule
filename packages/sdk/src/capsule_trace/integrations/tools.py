@@ -1,4 +1,4 @@
-"""Tool / function-call capture helpers.
+﻿"""Tool / function-call capture helpers.
 
 Provides `capture_tool_call` — a decorator and context manager that wraps
 any Python function and records its invocation as a ToolCall event in the
@@ -19,8 +19,8 @@ import traceback
 import uuid
 from typing import Any, Callable, TypeVar
 
-from capsule.core.context import get_current_session
-from capsule.core.models import Event, EventType, ToolCallPayload
+from capsule_trace.core.context import get_current_session
+from capsule_trace.core.models import Event, EventType, ToolCallPayload
 
 logger = logging.getLogger("capsule.integrations.tools")
 

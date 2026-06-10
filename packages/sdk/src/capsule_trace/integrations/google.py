@@ -1,4 +1,4 @@
-"""Google Generative AI integration — patches generate_content (sync + async)."""
+﻿"""Google Generative AI integration — patches generate_content (sync + async)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import time
 import uuid
 from typing import Any
 
-from capsule.core.context import get_current_session
-from capsule.core.models import (
+from capsule_trace.core.context import get_current_session
+from capsule_trace.core.models import (
     EventType,
     LLMCallPayload,
     LLMMessage,
@@ -83,7 +83,7 @@ def _patch_generate_content(genai: Any) -> None:
 
 
 def _emit_event(session: Any, payload: LLMCallPayload, duration_ms: float) -> None:
-    from capsule.core.models import Event
+    from capsule_trace.core.models import Event
 
     event = Event(
         session_id=session.session_id,

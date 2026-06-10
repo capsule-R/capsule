@@ -1,10 +1,10 @@
-"""LangGraph integration — hooks into StateGraph to capture node executions.
+﻿"""LangGraph integration — hooks into StateGraph to capture node executions.
 
 Usage::
 
     from langgraph.graph import StateGraph
-    from capsule.integrations.langgraph import add_capsule_tracing
-    import capsule
+    from capsule_trace.integrations.langgraph import add_capsule_tracing
+    import capsule_trace
 
     graph = StateGraph(AgentState)
     graph.add_node("llm", call_llm)
@@ -23,8 +23,8 @@ import logging
 import time
 from typing import Any
 
-from capsule.core.context import get_current_session
-from capsule.core.models import Event, EventType, ToolCallPayload
+from capsule_trace.core.context import get_current_session
+from capsule_trace.core.models import Event, EventType, ToolCallPayload
 
 logger = logging.getLogger("capsule.integrations.langgraph")
 

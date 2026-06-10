@@ -1,9 +1,9 @@
-# capsule-sdk
+# capsule-trace
 
 **Deterministic replay & time-travel debugger for AI agents.**
 
 ```bash
-pip install capsule-sdk
+pip install capsule-trace
 ```
 
 ---
@@ -11,7 +11,7 @@ pip install capsule-sdk
 ## Quick Start
 
 ```python
-import capsule
+import capsule_trace
 
 @capsule.trace(agent_name="my-agent")
 def run_agent(query: str) -> str:
@@ -30,22 +30,22 @@ That's it. Every LLM call is now captured automatically.
 
 ```bash
 # List captured sessions
-capsule-sdk list
+capsule-trace list
 
 # Inspect a session step by step
-capsule-sdk show ses_01HXYZ123
+capsule-trace show ses_01HXYZ123
 
 # Export to shareable file
-capsule-sdk export ses_01HXYZ123 --output bug.capsule
+capsule-trace export ses_01HXYZ123 --output bug.capsule
 
 # Replay deterministically
-capsule-sdk replay ses_01HXYZ123
+capsule-trace replay ses_01HXYZ123
 
 # Branch from step 7 with different temperature
-capsule-sdk branch ses_01HXYZ123 --from-step 7 --modify temperature=0.0
+capsule-trace branch ses_01HXYZ123 --from-step 7 --modify temperature=0.0
 
 # Diff two sessions
-capsule-sdk diff ses_01HXYZ ses_01HABC
+capsule-trace diff ses_01HXYZ ses_01HABC
 ```
 
 ## Supported Providers

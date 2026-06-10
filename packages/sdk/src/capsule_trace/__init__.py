@@ -1,11 +1,11 @@
-"""Capsule — Deterministic replay & time-travel debugger for AI agents."""
+﻿"""Capsule — Deterministic replay & time-travel debugger for AI agents."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from capsule.core.decorator import trace
-from capsule.core.session import Session, get_current_session
+from capsule_trace.core.decorator import trace
+from capsule_trace.core.session import Session, get_current_session
 
 __version__ = "0.1.0"
 __all__ = ["trace", "Session", "get_current_session", "last_session_path"]

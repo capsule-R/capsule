@@ -1,4 +1,4 @@
-"""Capsule CLI — entry point for all `capsule` commands."""
+﻿"""Capsule CLI — entry point for all `capsule` commands."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(package_name="capsule-sdk")
+@click.version_option(package_name="capsule-trace")
 def main() -> None:
     """Capsule — deterministic replay & time-travel debugger for AI agents."""
 
@@ -29,7 +29,7 @@ def main() -> None:
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def list_sessions(agent: str | None, status: str | None, limit: int, as_json: bool) -> None:
     """List captured sessions."""
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     backend = SQLiteBackend.default()
     sessions = backend.list_sessions(limit=limit)
@@ -78,7 +78,7 @@ def list_sessions(agent: str | None, status: str | None, limit: int, as_json: bo
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def show_session(session_id: str, as_json: bool) -> None:
     """Show details of a session."""
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     backend = SQLiteBackend.default()
     try:
@@ -125,8 +125,8 @@ def show_session(session_id: str, as_json: bool) -> None:
 )
 def export_session(session_id: str, output: str | None) -> None:
     """Export a session to a .capsule file."""
-    from capsule.core.exporter import export_capsule
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     backend = SQLiteBackend.default()
     out_path = Path(output) if output else Path(f"{session_id}.capsule")
@@ -147,7 +147,7 @@ def export_session(session_id: str, output: str | None) -> None:
 @click.argument("capsule_file", type=click.Path(exists=True))
 def import_capsule(capsule_file: str) -> None:
     """Import a .capsule file into the local store."""
-    from capsule.core.importer import import_capsule_file
+    from capsule_trace.core.importer import import_capsule_file
 
     path = Path(capsule_file)
     try:
@@ -167,7 +167,7 @@ def import_capsule(capsule_file: str) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Output result as JSON")
 def replay_session(session_id_or_file: str, mode: str, as_json: bool) -> None:
     """Replay a captured session deterministically from cassettes."""
-    from capsule.replay.engine import Replayer
+    from capsule_trace.replay.engine import Replayer
     from pathlib import Path
 
     try:
@@ -224,7 +224,7 @@ def branch_session(session_id: str, from_step: int, modify: tuple[str, ...]) -> 
         k, v = item.split("=", 1)
         modifications[k.strip()] = v.strip()
 
-    from capsule.replay.engine import Replayer
+    from capsule_trace.replay.engine import Replayer
 
     try:
         replayer = Replayer.from_session_id(session_id)
@@ -257,7 +257,7 @@ def branch_session(session_id: str, from_step: int, modify: tuple[str, ...]) -> 
 @click.argument("session_id_2")
 def diff_sessions(session_id_1: str, session_id_2: str) -> None:
     """Show differences between two sessions."""
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     backend = SQLiteBackend.default()
     try:
@@ -295,7 +295,7 @@ def diff_sessions(session_id_1: str, session_id_2: str) -> None:
 @click.option("--yes", is_flag=True, help="Skip confirmation prompt")
 def delete_session(session_id: str, yes: bool) -> None:
     """Delete a session from the local store."""
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     if not yes:
         click.confirm(f"Delete session {session_id}?", abort=True)
@@ -354,7 +354,7 @@ def upload_session_cmd(
         _os.environ["CAPSULE_CLOUD_URL"] = cloud_url
 
     try:
-        from capsule.cloud.uploader import upload_session
+        from capsule_trace.cloud.uploader import upload_session
 
         console.print(f"Uploading session [cyan]{session_id}[/cyan]…")
         result = upload_session(
@@ -417,7 +417,7 @@ def cloud_login(url: str, api_key: str, workspace: str) -> None:
 @cloud_group.command("status")
 def cloud_status() -> None:
     """Show current Capsule Cloud connection status."""
-    from capsule.cloud.uploader import _get_cloud_config
+    from capsule_trace.cloud.uploader import _get_cloud_config
 
     config = _get_cloud_config()
     if config["api_key"]:

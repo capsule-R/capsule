@@ -1,4 +1,4 @@
-"""Export a captured session to the .capsule binary format."""
+﻿"""Export a captured session to the .capsule binary format."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 
 import zstandard as zstd
 
-from capsule.core.models import (
+from capsule_trace.core.models import (
     CapsuleCompression,
     CapsuleEncryption,
     CapsuleIntegrity,
@@ -23,7 +23,7 @@ from capsule.core.models import (
 )
 
 try:
-    from capsule import __version__ as _SDK_VERSION
+    from capsule_trace import __version__ as _SDK_VERSION
 except ImportError:
     _SDK_VERSION = "0.0.0"
 
