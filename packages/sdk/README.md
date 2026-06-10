@@ -11,7 +11,7 @@ pip install capsule-sdk
 ## Quick Start
 
 ```python
-import capsule_sdk as capsule
+import capsule
 
 @capsule.trace(agent_name="my-agent")
 def run_agent(query: str) -> str:
