@@ -55,7 +55,7 @@ dev = [
 ]
 
 [project.scripts]
-capsule = "capsule.cli:main"
+capsule-sdk = "capsule.cli:main"
 
 [project.urls]
 Homepage = "https://capsule.dev"
