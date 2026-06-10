@@ -11,7 +11,7 @@ pip install capsule-sdk
 ## Quick Start
 
 ```python
-import capsule
+import capsule_sdk as capsule
 
 @capsule.trace(agent_name="my-agent")
 def run_agent(query: str) -> str:
@@ -30,22 +30,22 @@ That's it. Every LLM call is now captured automatically.
 
 ```bash
 # List captured sessions
-capsule list
+capsule-sdk list
 
 # Inspect a session step by step
-capsule show ses_01HXYZ123
+capsule-sdk show ses_01HXYZ123
 
 # Export to shareable file
-capsule export ses_01HXYZ123 --output bug.capsule
+capsule-sdk export ses_01HXYZ123 --output bug.capsule
 
 # Replay deterministically
-capsule replay ses_01HXYZ123
+capsule-sdk replay ses_01HXYZ123
 
 # Branch from step 7 with different temperature
-capsule branch ses_01HXYZ123 --from-step 7 --modify temperature=0.0
+capsule-sdk branch ses_01HXYZ123 --from-step 7 --modify temperature=0.0
 
 # Diff two sessions
-capsule diff ses_01HXYZ ses_01HABC
+capsule-sdk diff ses_01HXYZ ses_01HABC
 ```
 
 ## Supported Providers
