@@ -589,9 +589,9 @@ async def trigger_replay(
     if settings.modal_token_id and settings.modal_token_secret:
         try:
             import modal  # type: ignore[import-untyped]
-            from capsule_cloud.replay_worker import run_replay  # type: ignore[import]
 
-            run_replay.spawn(
+            run_replay = modal.Function.lookup("capsule-replay", "run_replay")
+            await run_replay.spawn.aio(
                 storage_path=session.storage_path,
                 mode=body.mode,
                 branch_from_step=body.branch_from_step,
