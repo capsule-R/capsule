@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
@@ -191,15 +191,15 @@ export default function DocsPage() {
           <P>Wrap any Python agent in three lines. Every run is captured as a replayable <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>.capsule</code> file automatically.</P>
 
           <H3>1. Install the SDK</H3>
-          <Code lang="bash">pip install capsule-sdk</Code>
+          <Code lang="bash">pip install capsule-trace</Code>
           <P>For provider auto-patching, install optional extras:</P>
-          <Code lang="bash">pip install "capsule-sdk[openai]"          # OpenAI
-pip install "capsule-sdk[anthropic]"       # Anthropic
-pip install "capsule-sdk[langchain]"       # LangChain + LangGraph
-pip install "capsule-sdk[openai,anthropic]" # multiple providers</Code>
+          <Code lang="bash">pip install "capsule-trace[openai]"          # OpenAI
+pip install "capsule-trace[anthropic]"       # Anthropic
+pip install "capsule-trace[langchain]"       # LangChain + LangGraph
+pip install "capsule-trace[openai,anthropic]" # multiple providers</Code>
 
           <H3>2. Wrap your agent</H3>
-          <Code lang="python">{`import capsule
+          <Code lang="python">{`import capsule_trace
 
 @capsule.trace(agent_name="my-agent", agent_version="1.0.0")
 def run_agent(query: str) -> str:
@@ -223,7 +223,7 @@ export CAPSULE_WORKSPACE_ID="your_workspace_id"</Code>
 
           <H3>Context manager (manual sessions)</H3>
           <P>For more control, use the <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>Session</code> context manager directly:</P>
-          <Code lang="python">import capsule
+          <Code lang="python">import capsule_trace
 from capsule import Session
 
 with Session(agent_name="pipeline", tags=["prod"]) as session:
@@ -460,8 +460,8 @@ capsule upload 01J2ABC --api-key csk_xxx --workspace ws_yyy</Code>
           <P>Capsule auto-patches supported providers when you use <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>@capsule.trace</code>. No code changes to your LLM calls are required.</P>
 
           <H3>OpenAI</H3>
-          <Code lang="python">pip install "capsule-sdk[openai]"</Code>
-          <Code lang="python">{`import capsule
+          <Code lang="python">pip install "capsule-trace[openai]"</Code>
+          <Code lang="python">{`import capsule_trace
 import openai
 
 client = openai.OpenAI()  # auto-patched when capsule is imported
@@ -476,8 +476,8 @@ def run(query: str) -> str:
           <P>Capsule patches <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>openai.OpenAI</code> and <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>openai.AsyncOpenAI</code>. Recorded cassettes enable deterministic replay without hitting the API.</P>
 
           <H3>Anthropic</H3>
-          <Code lang="python">pip install "capsule-sdk[anthropic]"</Code>
-          <Code lang="python">{`import capsule
+          <Code lang="python">pip install "capsule-trace[anthropic]"</Code>
+          <Code lang="python">{`import capsule_trace
 import anthropic
 
 client = anthropic.Anthropic()  # auto-patched
@@ -492,8 +492,8 @@ def run(query: str) -> str:
     return msg.content[0].text`}</Code>
 
           <H3>LangChain</H3>
-          <Code lang="python">pip install "capsule-sdk[langchain]"</Code>
-          <Code lang="python">{`import capsule
+          <Code lang="python">pip install "capsule-trace[langchain]"</Code>
+          <Code lang="python">{`import capsule_trace
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor
 
@@ -505,8 +505,8 @@ def run_chain(query: str) -> str:
     return executor.invoke({"input": query})["output"]`}</Code>
 
           <H3>LangGraph</H3>
-          <Code lang="python">pip install "capsule-sdk[langchain]"  # includes langgraph hooks</Code>
-          <Code lang="python">{`import capsule
+          <Code lang="python">pip install "capsule-trace[langchain]"  # includes langgraph hooks</Code>
+          <Code lang="python">{`import capsule_trace
 from langgraph.graph import StateGraph
 
 @capsule.trace(agent_name="langgraph-agent")
@@ -559,7 +559,7 @@ CAPSULE_DISABLE=1</Code>
 import os
 os.environ["CAPSULE_DISABLE"] = "1"
 
-import capsule  # no-ops from here on</Code>
+import capsule_trace  # no-ops from here on</Code>
 
           <H3>Local storage</H3>
           <P>Sessions are stored in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/sessions.db</code> (SQLite). Cloud credentials saved via <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>capsule cloud login</code> are stored in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/config.toml</code>.</P>

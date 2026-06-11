@@ -7,7 +7,20 @@ from pathlib import Path
 from capsule_trace.core.decorator import trace
 from capsule_trace.core.session import Session, get_current_session
 
-__version__ = "0.1.0"
+# Auto-activate integrations if the provider is installed
+try:
+    from capsule_trace.integrations.openai import patch as _patch_openai
+    _patch_openai()
+except ImportError:
+    pass
+
+try:
+    from capsule_trace.integrations.anthropic import patch as _patch_anthropic
+    _patch_anthropic()
+except ImportError:
+    pass
+
+__version__ = "0.1.1"
 __all__ = ["trace", "Session", "get_current_session", "last_session_path"]
 
 

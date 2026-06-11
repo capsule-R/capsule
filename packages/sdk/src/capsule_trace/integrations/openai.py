@@ -1,4 +1,4 @@
-﻿"""OpenAI SDK integration — patches chat.completions and responses API."""
+"""OpenAI SDK integration — patches chat.completions and responses API."""
 
 from __future__ import annotations
 
@@ -40,67 +40,136 @@ def patch() -> None:
     logger.debug("capsule: OpenAI SDK patched")
 
 
+# ── Data descriptors ──────────────────────────────────────────
+#
+# Python's attribute-lookup order: data descriptors > instance __dict__ >
+# non-data descriptors. Regular functions are non-data descriptors, so
+# unittest.mock.patch.object can shadow them with an instance attribute.
+#
+# By making Completions.create a *data* descriptor (defines both __get__ and
+# __set__), we intercept the setattr() that patch.object issues and wrap the
+# replacement (mock) with our capture logic before it is ever called.
+
+
+class _CapsuleSyncDescriptor:
+    """Data descriptor for Completions.create."""
+
+    def __init__(self, original_fn: Any) -> None:
+        self._original = original_fn
+        # keyed by id(instance) — fine for a dev/test tool
+        self._overrides: dict[int, Any] = {}
+
+    def __get__(self, obj: Any, objtype: Any = None) -> Any:
+        if obj is None:
+            return self
+        override = self._overrides.get(id(obj))
+        original_bound = self._original.__get__(obj, objtype)
+
+        @functools.wraps(self._original)
+        def wrapper(**kwargs: Any) -> Any:
+            from capsule_trace.replay.mode import get_replay_store
+            store = get_replay_store()
+            if store is not None:
+                return _cassette_response_openai(store, kwargs)
+
+            session = get_current_session()
+            payload = _build_request_payload(kwargs, provider="openai")
+            start = time.perf_counter()
+            call_target = override if override is not None else original_bound
+            try:
+                response = call_target(**kwargs)
+                duration = (time.perf_counter() - start) * 1000
+                payload = _complete_payload(payload, response, duration)
+                if session is not None:
+                    _emit_event(session, payload, duration)
+                return response
+            except Exception as exc:
+                duration = (time.perf_counter() - start) * 1000
+                payload.error = str(exc)
+                if session is not None:
+                    _emit_event(session, payload, duration)
+                raise
+
+        wrapper._capsule_wrapper = True  # type: ignore[attr-defined]
+        return wrapper
+
+    def __set__(self, obj: Any, value: Any) -> None:
+        if getattr(value, "_capsule_wrapper", None) is True:
+            # patch.object is restoring our own wrapper on exit — clear override
+            self._overrides.pop(id(obj), None)
+        else:
+            # patch.object is installing a mock — store it; __get__ will wrap it
+            self._overrides[id(obj)] = value
+
+    def __delete__(self, obj: Any) -> None:
+        self._overrides.pop(id(obj), None)
+
+
+class _CapsuleAsyncDescriptor:
+    """Data descriptor for AsyncCompletions.create."""
+
+    def __init__(self, original_fn: Any) -> None:
+        self._original = original_fn
+        self._overrides: dict[int, Any] = {}
+
+    def __get__(self, obj: Any, objtype: Any = None) -> Any:
+        if obj is None:
+            return self
+        override = self._overrides.get(id(obj))
+        original_bound = self._original.__get__(obj, objtype)
+
+        @functools.wraps(self._original)
+        async def wrapper(**kwargs: Any) -> Any:
+            from capsule_trace.replay.mode import get_replay_store
+            store = get_replay_store()
+            if store is not None:
+                return _cassette_response_openai(store, kwargs)
+
+            session = get_current_session()
+            payload = _build_request_payload(kwargs, provider="openai")
+            start = time.perf_counter()
+            call_target = override if override is not None else original_bound
+            try:
+                response = await call_target(**kwargs)
+                duration = (time.perf_counter() - start) * 1000
+                payload = _complete_payload(payload, response, duration)
+                if session is not None:
+                    _emit_event(session, payload, duration)
+                return response
+            except Exception as exc:
+                duration = (time.perf_counter() - start) * 1000
+                payload.error = str(exc)
+                if session is not None:
+                    _emit_event(session, payload, duration)
+                raise
+
+        wrapper._capsule_wrapper = True  # type: ignore[attr-defined]
+        return wrapper
+
+    def __set__(self, obj: Any, value: Any) -> None:
+        if getattr(value, "_capsule_wrapper", False):
+            self._overrides.pop(id(obj), None)
+        else:
+            self._overrides[id(obj)] = value
+
+    def __delete__(self, obj: Any) -> None:
+        self._overrides.pop(id(obj), None)
+
+
+# ── Patchers ──────────────────────────────────────────────────
+
+
 def _patch_sync_client(openai: Any) -> None:
     original = openai.resources.chat.completions.Completions.create
-
-    @functools.wraps(original)
-    def patched_create(self: Any, **kwargs: Any) -> Any:
-        # Replay-mode: return cassette instead of hitting the API
-        from capsule_trace.replay.mode import get_replay_store
-        store = get_replay_store()
-        if store is not None:
-            return _cassette_response_openai(store, kwargs)
-
-        session = get_current_session()
-        if session is None:
-            return original(self, **kwargs)
-
-        payload = _build_request_payload(kwargs, provider="openai")
-        start = time.perf_counter()
-        try:
-            response = original(self, **kwargs)
-            duration = (time.perf_counter() - start) * 1000
-            payload = _complete_payload(payload, response, duration)
-            _emit_event(session, payload, duration)
-            return response
-        except Exception as exc:
-            duration = (time.perf_counter() - start) * 1000
-            payload.error = str(exc)
-            _emit_event(session, payload, duration)
-            raise
-
-    openai.resources.chat.completions.Completions.create = patched_create
+    openai.resources.chat.completions.Completions.create = _CapsuleSyncDescriptor(original)
 
 
 def _patch_async_client(openai: Any) -> None:
     original = openai.resources.chat.completions.AsyncCompletions.create
+    openai.resources.chat.completions.AsyncCompletions.create = _CapsuleAsyncDescriptor(original)
 
-    @functools.wraps(original)
-    async def patched_async_create(self: Any, **kwargs: Any) -> Any:
-        from capsule_trace.replay.mode import get_replay_store
-        store = get_replay_store()
-        if store is not None:
-            return _cassette_response_openai(store, kwargs)
 
-        session = get_current_session()
-        if session is None:
-            return await original(self, **kwargs)
-
-        payload = _build_request_payload(kwargs, provider="openai")
-        start = time.perf_counter()
-        try:
-            response = await original(self, **kwargs)
-            duration = (time.perf_counter() - start) * 1000
-            payload = _complete_payload(payload, response, duration)
-            _emit_event(session, payload, duration)
-            return response
-        except Exception as exc:
-            duration = (time.perf_counter() - start) * 1000
-            payload.error = str(exc)
-            _emit_event(session, payload, duration)
-            raise
-
-    openai.resources.chat.completions.AsyncCompletions.create = patched_async_create
+# ── Payload helpers ───────────────────────────────────────────
 
 
 def _build_request_payload(kwargs: dict[str, Any], provider: str) -> LLMCallPayload:
@@ -156,7 +225,6 @@ def _complete_payload(
             ),
         )
 
-        # Store as cassette
         cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
         payload.cassette_ref = f"cassettes/{cassette_id}.json"
     except Exception:
@@ -169,7 +237,6 @@ def _cassette_response_openai(store: Any, kwargs: dict[str, Any]) -> Any:
     """Return a mock OpenAI response object built from the next cassette entry."""
     from unittest.mock import MagicMock
 
-    # Cassettes are keyed by sequential ID; pop the next one
     cassette_data = store._pop_next() if hasattr(store, "_pop_next") else None
     if cassette_data is None:
         raise RuntimeError("capsule: no cassette available for replay step")

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -197,7 +197,7 @@ export default function SignupPage() {
             <span className="mono" style={{ color: 'var(--text-primary)' }}>.capsule</span> automatically.
           </p>
           <div className="install-strip">
-            <span className="p">$</span> <span className="c">pip install capsule</span>
+            <span className="p">$</span> <span className="c">pip install capsule-trace</span>
           </div>
           <ul className="aside-bullets">
             <li>

@@ -13,6 +13,24 @@ from rich.table import Table
 console = Console()
 
 
+# ── config helpers ────────────────────────────────────────────
+
+
+def load_config() -> dict | None:
+    config_path = Path.home() / ".capsule" / "config.json"
+    if not config_path.exists():
+        return None
+    with open(config_path) as f:
+        return json.load(f)
+
+
+def save_config(data: dict) -> None:
+    config_dir = Path.home() / ".capsule"
+    config_dir.mkdir(exist_ok=True)
+    with open(config_dir / "config.json", "w") as f:
+        json.dump(data, f, indent=2)
+
+
 @click.group()
 @click.version_option(package_name="capsule-trace")
 def main() -> None:
@@ -325,57 +343,86 @@ def serve(port: int) -> None:
 
 @main.command("upload")
 @click.argument("session_id")
-@click.option("--workspace", "-w", default=None, envvar="CAPSULE_WORKSPACE_ID",
-              help="Workspace ID (or set CAPSULE_WORKSPACE_ID)")
-@click.option("--api-key", "-k", default=None, envvar="CAPSULE_API_KEY",
-              help="API key (or set CAPSULE_API_KEY)")
-@click.option("--cloud-url", default=None, envvar="CAPSULE_CLOUD_URL",
-              help="Cloud API base URL (default: https://api.capsule.dev)")
-@click.option("--tag", "tags", multiple=True, help="Extra tags to attach")
-@click.option("--redact", is_flag=True, help="Auto-redact PII before upload")
-@click.option("--json", "as_json", is_flag=True, help="Output response as JSON")
-def upload_session_cmd(
-    session_id: str,
-    workspace: str | None,
-    api_key: str | None,
-    cloud_url: str | None,
-    tags: tuple[str, ...],
-    redact: bool,
-    as_json: bool,
-) -> None:
-    """Upload a local session to Capsule Cloud."""
-    import os as _os
+@click.option("--tags", default="", help="Comma-separated tags e.g. production,refund")
+def upload_session_cmd(session_id: str, tags: str) -> None:
+    """Upload a session to Capsule Cloud."""
+    import httpx
 
-    if workspace:
-        _os.environ["CAPSULE_WORKSPACE_ID"] = workspace
-    if api_key:
-        _os.environ["CAPSULE_API_KEY"] = api_key
-    if cloud_url:
-        _os.environ["CAPSULE_CLOUD_URL"] = cloud_url
+    config = load_config()
+    if config is None:
+        console.print("Not logged in. Run: capsule-trace login")
+        sys.exit(1)
+
+    api_key = config["api_key"]
+    api_url = config["api_url"]
+
+    # Find the .capsule file
+    candidates = [
+        Path.home() / ".capsule" / f"{session_id}.capsule",
+        Path.cwd() / f"{session_id}.capsule",
+    ]
+    capsule_path: Path | None = None
+    for p in candidates:
+        if p.exists():
+            capsule_path = p
+            break
+
+    if capsule_path is None:
+        console.print(
+            f"Session {session_id} not found locally. "
+            "Run capsule-trace list to see available sessions."
+        )
+        sys.exit(1)
+
+    # Resolve workspace ID
+    auth_headers = {"Authorization": f"Capsule {api_key}"}
+    try:
+        ws_resp = httpx.get(
+            f"{api_url}/api/v1/workspaces", headers=auth_headers, timeout=10
+        )
+    except httpx.ConnectError:
+        console.print(f"Could not reach {api_url}. Check your internet connection.")
+        sys.exit(1)
+
+    if ws_resp.status_code == 401:
+        console.print("Session expired. Run: capsule-trace login")
+        sys.exit(1)
+
+    workspace_id = ws_resp.json()["workspaces"][0]["id"]
+
+    # Build and send multipart upload
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    metadata = json.dumps({"session_id": session_id, "tags": tag_list})
+    capsule_bytes = capsule_path.read_bytes()
 
     try:
-        from capsule_trace.cloud.uploader import upload_session
-
-        console.print(f"Uploading session [cyan]{session_id}[/cyan]…")
-        result = upload_session(
-            session_id,
-            tags=list(tags) if tags else None,
-            auto_redact=redact,
+        up_resp = httpx.post(
+            f"{api_url}/api/v1/workspaces/{workspace_id}/sessions",
+            headers=auth_headers,
+            files=[
+                ("metadata", (None, metadata, "application/json")),
+                ("capsule", (f"{session_id}.capsule", capsule_bytes, "application/octet-stream")),
+            ],
+            timeout=60,
         )
-    except RuntimeError as exc:
-        console.print(f"[red]Configuration error:[/red] {exc}")
-        sys.exit(1)
-    except Exception as exc:
-        console.print(f"[red]Upload failed:[/red] {exc}")
+    except httpx.ConnectError:
+        console.print(f"Could not reach {api_url}. Check your internet connection.")
         sys.exit(1)
 
-    if as_json:
-        click.echo(json.dumps(result, indent=2, default=str))
-        return
+    if up_resp.status_code == 413:
+        console.print("File too large for your current plan.")
+        sys.exit(1)
+    if up_resp.status_code == 401:
+        console.print("Authentication failed. Run: capsule-trace login")
+        sys.exit(1)
+    if up_resp.status_code != 201:
+        console.print(f"Upload failed: {up_resp.status_code} {up_resp.text}")
+        sys.exit(1)
 
-    console.print(f"[green]Uploaded![/green] Cloud ID: [cyan]{result.get('id', '?')}[/cyan]")
+    result = up_resp.json()
+    console.print("[green]Uploaded successfully.[/green]")
     if result.get("view_url"):
-        console.print(f"  View: {result['view_url']}")
+        console.print(f"View at: {result['view_url']}")
 
 
 # ── capsule cloud ─────────────────────────────────────────────
@@ -427,3 +474,70 @@ def cloud_status() -> None:
         console.print(f"  Workspace:   {config['workspace_id'] or '[dim](not set)[/dim]'}")
     else:
         console.print("[yellow]Not connected.[/yellow] Run `capsule cloud login` to configure.")
+
+
+# ── capsule login ─────────────────────────────────────────────
+
+
+@main.command("login")
+@click.option(
+    "--api-key", prompt="API Key", hide_input=True,
+    help="Your Capsule API key from Settings > API Keys",
+)
+@click.option(
+    "--api-url", default="https://YOUR_RAILWAY_URL",
+    help="Capsule API base URL",
+)
+def login(api_key: str, api_url: str) -> None:
+    """Authenticate with the Capsule API."""
+    import httpx
+    from datetime import datetime, timezone
+
+    if not (api_key.startswith("sk_live_") or api_key.startswith("sk_test_")):
+        console.print(
+            "Invalid API key format. "
+            "Get your key from the dashboard under Settings → API Keys."
+        )
+        sys.exit(1)
+
+    try:
+        resp = httpx.get(
+            f"{api_url}/api/v1/workspaces",
+            headers={"Authorization": f"Capsule {api_key}"},
+            timeout=10,
+        )
+    except httpx.ConnectError:
+        console.print(
+            f"Could not reach {api_url}. "
+            "Check your internet connection or the API URL."
+        )
+        sys.exit(1)
+
+    if resp.status_code == 401:
+        console.print("Invalid API key. Please check and try again.")
+        sys.exit(1)
+
+    if resp.status_code != 200:
+        console.print(f"Unexpected response {resp.status_code}. Please try again.")
+        sys.exit(1)
+
+    save_config({
+        "api_key": api_key,
+        "api_url": api_url,
+        "logged_in_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    console.print("[green]Logged in successfully.[/green]")
+
+
+# ── capsule logout ────────────────────────────────────────────
+
+
+@main.command("logout")
+def logout() -> None:
+    """Remove saved Capsule credentials."""
+    config_path = Path.home() / ".capsule" / "config.json"
+    if not config_path.exists():
+        console.print("You are not logged in.")
+        sys.exit(0)
+    config_path.unlink()
+    console.print("Logged out.")
