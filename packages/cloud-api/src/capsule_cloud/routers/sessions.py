@@ -27,6 +27,8 @@ from capsule_cloud.database import get_db
 from capsule_cloud import storage as _storage
 from capsule_cloud.models import ApiKey, Session as CloudSession, User, Workspace
 from capsule_cloud.schemas import (
+    BranchCreateRequest,
+    BranchCreateResponse,
     DailyCount,
     ReplayResponse,
     SessionListResponse,
@@ -544,6 +546,17 @@ async def trigger_replay(
     else:
         replay_status = "pending_modal_config"
 
+    # Register the job so GET /replays/{replay_id} can report its status.
+    from capsule_cloud.routers.replays import REPLAY_JOBS
+
+    REPLAY_JOBS[replay_id] = {
+        "created_at": datetime.now(timezone.utc),
+        "session_id": session_id,
+        "step_count": session.step_count or 0,
+        "error": None,
+        "initial_status": replay_status,
+    }
+
     return ReplayResponse(
         id=replay_id,
         session_id=session_id,
@@ -552,6 +565,50 @@ async def trigger_replay(
         branch_from_step=body.branch_from_step,
         created_at=datetime.now(timezone.utc),
     )
+
+
+# ── Branch ───────────────────────────────────────────────────
+
+@router.post(
+    "/{session_id}/branch",
+    response_model=BranchCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_branch(
+    workspace_id: str,
+    session_id: str,
+    body: BranchCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BranchCreateResponse:
+    """Fork a session at a specific step.
+
+    Branch records live in an in-process store until replay-engine
+    persistence lands; the Branches page lists them via GET /branches.
+    """
+    await get_workspace_member(workspace_id, current_user, db)
+    session = await _get_session_or_404(workspace_id, session_id, db)
+
+    if session.step_count and body.from_step >= session.step_count:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"from_step {body.from_step} is out of range "
+                   f"(session has {session.step_count} steps)",
+        )
+
+    from capsule_cloud.routers.branches import BRANCH_STORE
+
+    branch_id = str(ulid.new())
+    BRANCH_STORE.setdefault(workspace_id, []).append({
+        "id": branch_id,
+        "session_id": session_id,
+        "from_step": body.from_step,
+        "note": body.note,
+        "status": "created",
+        "created_by": current_user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return BranchCreateResponse(branch_id=branch_id)
 
 
 # ── Helpers ───────────────────────────────────────────────────

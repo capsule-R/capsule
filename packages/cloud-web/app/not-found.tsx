@@ -49,7 +49,7 @@ export default function NotFound() {
           textAlign: 'left',
         }}>
           <span style={{ color: 'var(--replay)' }}>$</span>{' '}
-          <span style={{ color: 'var(--text-tertiary)' }}>capsule replay</span>{' '}
+          <span style={{ color: 'var(--text-tertiary)' }}>capsule-trace replay</span>{' '}
           <span style={{ color: 'var(--error)' }}>sess_not_found</span>
           <br />
           <span style={{ color: 'var(--error)' }}>✗ Error:</span>{' '}

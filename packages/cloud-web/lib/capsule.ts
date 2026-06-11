@@ -300,6 +300,128 @@ export async function downloadSessionCapsule(
   }
 }
 
+// ── Capsule upload (multipart) ────────────────────────────────
+
+export interface UploadedSession {
+  id: string;
+  workspace_id: string;
+  agent_name: string;
+  agent_version: string | null;
+  started_at: string | null;
+  duration_ms: number | null;
+  status: string;
+  step_count: number;
+  total_cost_usd: number;
+  storage_size_bytes: number;
+  tags: string[];
+  uploaded_at: string;
+  view_url: string | null;
+}
+
+/** POST multipart without forcing a JSON content-type (browser sets the boundary). */
+async function apiUploadForm(path: string, form: FormData): Promise<Response> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return fetch(`${API_BASE}${path}`, { method: 'POST', body: form, headers });
+}
+
+/** Upload a .capsule file. The backend expects multipart parts named
+ *  `metadata` (JSON string) and `file` (the binary archive). */
+export async function uploadCapsuleFile(
+  workspaceId: string,
+  file: File,
+  agentName: string,
+  tags: string[],
+): Promise<{ data?: UploadedSession; error?: string; status?: number }> {
+  // session_id must match ^[a-zA-Z0-9_-]+$ on the backend
+  const sessionId = file.name
+    .replace(/\.capsule$/i, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '-')
+    .slice(0, 128) || 'session';
+
+  const form = new FormData();
+  form.append(
+    'metadata',
+    JSON.stringify({ session_id: sessionId, agent_name: agentName || sessionId, tags }),
+  );
+  form.append('file', file, file.name);
+
+  try {
+    const res = await apiUploadForm(`/workspaces/${workspaceId}/sessions`, form);
+    if (res.status === 201) {
+      return { data: (await res.json()) as UploadedSession, status: 201 };
+    }
+    const detail = await res.json().catch(() => null);
+    return { error: detail?.detail ?? `Upload failed (${res.status})`, status: res.status };
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
+}
+
+// ── Replay ────────────────────────────────────────────────────
+
+export interface ReplayResult {
+  is_deterministic: boolean;
+  replayed_steps: number;
+  original_steps: number;
+}
+
+export interface ReplayStatus {
+  replay_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  result: ReplayResult | null;
+  error: string | null;
+}
+
+export async function startReplay(
+  workspaceId: string,
+  sessionId: string,
+): Promise<{ replayId?: string; error?: string }> {
+  try {
+    const res = await apiFetch(`/workspaces/${workspaceId}/sessions/${sessionId}/replay`, {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'cassette' }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) return { error: json?.detail ?? `Replay failed (${res.status})` };
+    return { replayId: json.id ?? json.replay_id };
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
+}
+
+export async function getReplayStatus(replayId: string): Promise<ReplayStatus | null> {
+  try {
+    const res = await apiFetch(`/replays/${replayId}`);
+    if (!res.ok) return null;
+    return (await res.json()) as ReplayStatus;
+  } catch {
+    return null;
+  }
+}
+
+// ── Branches ──────────────────────────────────────────────────
+
+export async function createBranch(
+  workspaceId: string,
+  sessionId: string,
+  fromStep: number,
+  note: string,
+): Promise<{ branchId?: string; error?: string }> {
+  try {
+    const res = await apiFetch(`/workspaces/${workspaceId}/sessions/${sessionId}/branch`, {
+      method: 'POST',
+      body: JSON.stringify({ from_step: fromStep, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) return { error: json?.detail ?? `Branch failed (${res.status})` };
+    return { branchId: json.branch_id };
+  } catch {
+    return { error: 'Network error — is the API running?' };
+  }
+}
+
 // ── Formatting helpers ────────────────────────────────────────
 
 /** Format a USD cost. Sub-cent values keep 4 dp so micro-costs aren't shown as $0.00. */

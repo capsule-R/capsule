@@ -135,7 +135,7 @@ export default function LoginPage() {
           </div>
           <div className="aside-card">
             <div className="ach">
-              capsule replay sess_8f2a91c4
+              capsule-trace replay sess_8f2a91c4
               <span className="live"><i />live</span>
             </div>
             <div className="aside-steps">

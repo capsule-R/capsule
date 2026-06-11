@@ -193,13 +193,13 @@ export default function DocsPage() {
           <H3>1. Install the SDK</H3>
           <Code lang="bash">pip install capsule-trace</Code>
           <P>For provider auto-patching, install optional extras:</P>
-          <Code lang="bash">pip install "capsule-trace[openai]"          # OpenAI
+          <Code lang="bash">{`pip install "capsule-trace[openai]"          # OpenAI
 pip install "capsule-trace[anthropic]"       # Anthropic
 pip install "capsule-trace[langchain]"       # LangChain + LangGraph
-pip install "capsule-trace[openai,anthropic]" # multiple providers</Code>
+pip install "capsule-trace[openai,anthropic]" # multiple providers`}</Code>
 
           <H3>2. Wrap your agent</H3>
-          <Code lang="python">{`import capsule_trace
+          <Code lang="python">{`import capsule_trace as capsule
 
 @capsule.trace(agent_name="my-agent", agent_version="1.0.0")
 def run_agent(query: str) -> str:
@@ -214,8 +214,8 @@ async def run_async_agent(query: str) -> str:
 
           <H3>3. Connect to your workspace</H3>
           <P>Set your API key (found in <b>Settings → API Keys</b>) and workspace ID:</P>
-          <Code lang="bash">export CAPSULE_API_KEY="csk_your_key_here"
-export CAPSULE_WORKSPACE_ID="your_workspace_id"</Code>
+          <Code lang="bash">{`export CAPSULE_API_KEY="csk_your_key_here"
+export CAPSULE_WORKSPACE_ID="your_workspace_id"`}</Code>
           <P>Or pass them at trace time with <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>auto_upload=True</code> for automatic upload after each run.</P>
 
           <H3>4. Run your agent</H3>
@@ -223,8 +223,7 @@ export CAPSULE_WORKSPACE_ID="your_workspace_id"</Code>
 
           <H3>Context manager (manual sessions)</H3>
           <P>For more control, use the <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>Session</code> context manager directly:</P>
-          <Code lang="python">import capsule_trace
-from capsule import Session
+          <Code lang="python">{`from capsule_trace import Session
 
 with Session(agent_name="pipeline", tags=["prod"]) as session:
     # session.session_id available here
@@ -232,7 +231,7 @@ with Session(agent_name="pipeline", tags=["prod"]) as session:
     run_step_two(result)
 
 # session is finalized and exported to ~/.capsule/ on exit
-capsule_path = session.export("./my_run.capsule")</Code>
+capsule_path = session.export("./my_run.capsule")`}</Code>
 
           {/* ── SDK REFERENCE ── */}
           <H2 id="sdk">SDK Reference</H2>
@@ -261,7 +260,7 @@ def my_agent(query: str) -> str: ...`}</Code>
 
           <H3>Session class</H3>
           <P>Use <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>Session</code> directly when you need lower-level control or want to capture events from multiple call sites.</P>
-          <Code lang="python">from capsule import Session, get_current_session
+          <Code lang="python">{`from capsule_trace import Session, get_current_session
 
 # sync context manager
 with Session(agent_name="pipeline", tags=["batch"]) as s:
@@ -272,7 +271,7 @@ async with Session(agent_name="async-pipeline") as s:
     await run_steps()
 
 # access the active session from anywhere in the call stack
-current = get_current_session()  # returns Session | None</Code>
+current = get_current_session()  # returns Session | None`}</Code>
 
           <H3>Session methods</H3>
           <Table
@@ -311,20 +310,20 @@ current = get_current_session()  # returns Session | None</Code>
 
           {/* ── CLI REFERENCE ── */}
           <H2 id="cli">CLI Reference</H2>
-          <P>The <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>capsule</code> CLI is included with the SDK. Sessions are stored locally in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/sessions.db</code> (SQLite).</P>
+          <P>The <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>capsule-trace</code> CLI is included with the SDK. Sessions are stored locally in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/sessions.db</code> (SQLite).</P>
 
           <H3>Session commands</H3>
           <Table
             headers={['Command', 'Description']}
             rows={[
-              ['capsule list [--agent NAME] [--status STATUS] [--limit N] [--json]', 'List captured sessions with optional filters.'],
-              ['capsule show <session_id> [--json]', 'Display full session details and step-by-step event trace.'],
-              ['capsule replay <session_id|file> [--mode cassette|live] [--json]', 'Replay a session. cassette mode uses recorded LLM responses for deterministic replay. live mode re-runs against live APIs.'],
-              ['capsule branch <session_id> --from-step N [--modify key=value]', 'Fork a session at step N. Use --modify to override a payload field before replaying.'],
-              ['capsule diff <id1> <id2>', 'Side-by-side diff of two sessions (inputs, outputs, costs, step counts).'],
-              ['capsule export <session_id> [-o output.capsule]', 'Export session to a .capsule file.'],
-              ['capsule import <file.capsule>', 'Import a .capsule file into local storage.'],
-              ['capsule delete <session_id> [--yes]', 'Delete a session. Prompts for confirmation unless --yes is passed.'],
+              ['capsule-trace list [--agent NAME] [--status STATUS] [--limit N] [--json]', 'List captured sessions with optional filters.'],
+              ['capsule-trace show <session_id> [--json]', 'Display full session details and step-by-step event trace.'],
+              ['capsule-trace replay <session_id|file> [--mode cassette|live] [--json]', 'Replay a session. cassette mode uses recorded LLM responses for deterministic replay. live mode re-runs against live APIs.'],
+              ['capsule-trace branch <session_id> --from-step N [--modify key=value]', 'Fork a session at step N. Use --modify to override a payload field before replaying.'],
+              ['capsule-trace diff <id1> <id2>', 'Side-by-side diff of two sessions (inputs, outputs, costs, step counts).'],
+              ['capsule-trace export <session_id> [-o output.capsule]', 'Export session to a .capsule file.'],
+              ['capsule-trace import <file.capsule>', 'Import a .capsule file into local storage.'],
+              ['capsule-trace delete <session_id> [--yes]', 'Delete a session. Prompts for confirmation unless --yes is passed.'],
             ]}
           />
 
@@ -332,34 +331,34 @@ current = get_current_session()  # returns Session | None</Code>
           <Table
             headers={['Command', 'Description']}
             rows={[
-              ['capsule upload <session_id> --api-key KEY --workspace ID', 'Upload a local session to your cloud workspace.'],
-              ['capsule cloud login --url URL --api-key KEY --workspace ID', 'Save cloud credentials to ~/.capsule/config.toml.'],
-              ['capsule cloud status', 'Show current cloud connection status and workspace info.'],
+              ['capsule-trace upload <session_id> --tags TAG1,TAG2', 'Upload a local session to your cloud workspace.'],
+              ['capsule-trace login --api-key KEY', 'Verify and save cloud credentials to ~/.capsule/config.json.'],
+              ['capsule-trace logout', 'Remove saved cloud credentials.'],
             ]}
           />
 
           <H3>Examples</H3>
-          <Code lang="bash"># List last 10 failed sessions for the "research-agent"
-capsule list --agent research-agent --status failed --limit 10
+          <Code lang="bash">{`# List last 10 failed sessions for the "research-agent"
+capsule-trace list --agent research-agent --status failed --limit 10
 
 # Replay session 01J2... using cassettes (deterministic)
-capsule replay 01J2ABC --mode cassette
+capsule-trace replay 01J2ABC --mode cassette
 
 # Branch at step 3 and override the system prompt
-capsule branch 01J2ABC --from-step 3 --modify "messages[0].content=You are a concise assistant"
+capsule-trace branch 01J2ABC --from-step 3 --modify "messages[0].content=You are a concise assistant"
 
 # Diff two sessions side by side
-capsule diff 01J2ABC 01J2XYZ
+capsule-trace diff 01J2ABC 01J2XYZ
 
 # Upload to cloud
-capsule upload 01J2ABC --api-key csk_xxx --workspace ws_yyy</Code>
+capsule-trace upload 01J2ABC --tags production`}</Code>
 
           {/* ── REST API ── */}
           <H2 id="api">REST API</H2>
           <P>Base URL: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>https://api.capsule.dev/api/v1</code></P>
           <P>All authenticated endpoints require a Bearer token in the <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>Authorization</code> header:</P>
-          <Code lang="bash">curl -H "Authorization: Bearer csk_your_key" \
-     https://api.capsule.dev/api/v1/workspaces</Code>
+          <Code lang="bash">{`curl -H "Authorization: Bearer csk_your_key" \\
+     https://api.capsule.dev/api/v1/workspaces`}</Code>
 
           <H3>Authentication</H3>
           <Table
@@ -460,8 +459,8 @@ capsule upload 01J2ABC --api-key csk_xxx --workspace ws_yyy</Code>
           <P>Capsule auto-patches supported providers when you use <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>@capsule.trace</code>. No code changes to your LLM calls are required.</P>
 
           <H3>OpenAI</H3>
-          <Code lang="python">pip install "capsule-trace[openai]"</Code>
-          <Code lang="python">{`import capsule_trace
+          <Code lang="python">{`pip install "capsule-trace[openai]"`}</Code>
+          <Code lang="python">{`import capsule_trace as capsule
 import openai
 
 client = openai.OpenAI()  # auto-patched when capsule is imported
@@ -476,8 +475,8 @@ def run(query: str) -> str:
           <P>Capsule patches <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>openai.OpenAI</code> and <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>openai.AsyncOpenAI</code>. Recorded cassettes enable deterministic replay without hitting the API.</P>
 
           <H3>Anthropic</H3>
-          <Code lang="python">pip install "capsule-trace[anthropic]"</Code>
-          <Code lang="python">{`import capsule_trace
+          <Code lang="python">{`pip install "capsule-trace[anthropic]"`}</Code>
+          <Code lang="python">{`import capsule_trace as capsule
 import anthropic
 
 client = anthropic.Anthropic()  # auto-patched
@@ -492,8 +491,8 @@ def run(query: str) -> str:
     return msg.content[0].text`}</Code>
 
           <H3>LangChain</H3>
-          <Code lang="python">pip install "capsule-trace[langchain]"</Code>
-          <Code lang="python">{`import capsule_trace
+          <Code lang="python">{`pip install "capsule-trace[langchain]"`}</Code>
+          <Code lang="python">{`import capsule_trace as capsule
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor
 
@@ -505,8 +504,8 @@ def run_chain(query: str) -> str:
     return executor.invoke({"input": query})["output"]`}</Code>
 
           <H3>LangGraph</H3>
-          <Code lang="python">pip install "capsule-trace[langchain]"  # includes langgraph hooks</Code>
-          <Code lang="python">{`import capsule_trace
+          <Code lang="python">{`pip install "capsule-trace[langchain]"  # includes langgraph hooks`}</Code>
+          <Code lang="python">{`import capsule_trace as capsule
 from langgraph.graph import StateGraph
 
 @capsule.trace(agent_name="langgraph-agent")
@@ -517,8 +516,8 @@ async def run_graph(state: dict) -> dict:
 
           <H3>Manual event capture</H3>
           <P>For unsupported providers, emit events directly:</P>
-          <Code lang="python">{`from capsule import get_current_session
-from capsule.core.models import Event, EventType, ToolCallPayload
+          <Code lang="python">{`from capsule_trace import get_current_session
+from capsule_trace.core.models import Event, EventType, ToolCallPayload
 from datetime import datetime, timezone
 
 session = get_current_session()
@@ -532,7 +531,7 @@ if session:
         duration_ms=142.5,
         payload=ToolCallPayload(
             tool_name="web_search",
-            arguments={"query": "capsule replay debugger"},
+            arguments={"query": "deterministic replay debugger"},
             result={"snippets": [...]},
         ),
     ))`}</Code>
@@ -544,7 +543,7 @@ if session:
           <Table
             headers={['Variable', 'Default', 'Description']}
             rows={[
-              ['CAPSULE_API_KEY', '—', 'Cloud API key (prefix csk_). Required for auto_upload and capsule upload.'],
+              ['CAPSULE_API_KEY', '—', 'Cloud API key (prefix csk_). Required for auto_upload and capsule-trace upload.'],
               ['CAPSULE_WORKSPACE_ID', '—', 'Target workspace for uploads.'],
               ['CAPSULE_CLOUD_URL', 'https://api.capsule.dev', 'Override cloud API base URL (e.g. for self-hosted).'],
               ['CAPSULE_DISABLE', '0', 'Set to 1/true/yes to disable all capture. Useful in test environments.'],
@@ -555,14 +554,14 @@ if session:
           <H3>Disabling capture in tests</H3>
           <Code lang="bash"># pytest.ini or .env.test
 CAPSULE_DISABLE=1</Code>
-          <Code lang="python"># Or programmatically
+          <Code lang="python">{`# Or programmatically
 import os
 os.environ["CAPSULE_DISABLE"] = "1"
 
-import capsule_trace  # no-ops from here on</Code>
+import capsule_trace  # no-ops from here on`}</Code>
 
           <H3>Local storage</H3>
-          <P>Sessions are stored in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/sessions.db</code> (SQLite). Cloud credentials saved via <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>capsule cloud login</code> are stored in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/config.toml</code>.</P>
+          <P>Sessions are stored in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/sessions.db</code> (SQLite). Cloud credentials saved via <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>capsule-trace login</code> are stored in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>~/.capsule/config.json</code>.</P>
           <P>To reset local storage: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>rm ~/.capsule/sessions.db</code>. This does not affect sessions already uploaded to the cloud.</P>
 
           <div style={{ marginTop: 64, paddingTop: 32, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 20, fontSize: 13.5, color: 'var(--text-tertiary)' }}>

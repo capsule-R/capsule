@@ -3,12 +3,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { DashboardShell } from '@/components/DashboardShell';
+import { UploadModal } from '@/components/UploadModal';
+import { ToastHost } from '@/components/Toast';
 import {
   apiFetch,
   getPrimaryWorkspace,
   downloadSessionCapsule,
   formatUSD,
   agentColor,
+  type UploadedSession,
 } from '@/lib/capsule';
 
 interface Session {
@@ -41,7 +44,33 @@ export default function SessionsPage() {
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const PER = 10;
+
+  // Auto-open the upload modal when arriving via "+ New capture" (?upload=1)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('upload=1')) {
+      setUploadOpen(true);
+    }
+  }, []);
+
+  const handleUploaded = (s: UploadedSession) => {
+    const ok = s.status === 'success' || s.status === 'completed';
+    const row: Session = {
+      id: s.id,
+      ok,
+      statusLabel: s.status,
+      agent: s.agent_name || '—',
+      steps: s.step_count || 0,
+      dur: s.duration_ms ? `${(s.duration_ms / 1000).toFixed(1)}s` : '—',
+      cost: formatUSD(s.total_cost_usd),
+      costN: Number(s.total_cost_usd ?? 0),
+      when: s.uploaded_at ? new Date(s.uploaded_at).toLocaleDateString() : '—',
+      ts: s.uploaded_at ? new Date(s.uploaded_at).getTime() : Date.now(),
+    };
+    setSessions((prev) => [row, ...prev.filter((p) => p.id !== row.id)]);
+    setPage(1);
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -114,13 +143,16 @@ export default function SessionsPage() {
       active="sessions"
       title="Sessions"
       crumb="workspace / sessions"
-      action={{ label: 'New capture', href: '/dashboard/settings/api-keys' }}
+      action={{ label: 'New capture', onClick: () => setUploadOpen(true) }}
     >
       <div className="page-head">
         <div>
           <h2>Sessions</h2>
           <p>Every captured agent execution. Click a row to open the time-travel inspector.</p>
         </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
+          + Upload .capsule
+        </button>
       </div>
 
       {/* Filters */}
@@ -234,6 +266,16 @@ export default function SessionsPage() {
           <button disabled={safePage === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} style={{ minWidth: 32, height: 32, padding: '0 8px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12.5, cursor: safePage === totalPages ? 'not-allowed' : 'pointer', opacity: safePage === totalPages ? 0.4 : 1 }}>›</button>
         </div>
       </div>
+
+      {workspaceId && (
+        <UploadModal
+          workspaceId={workspaceId}
+          open={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+          onUploaded={handleUploaded}
+        />
+      )}
+      <ToastHost />
     </DashboardShell>
   );
 }

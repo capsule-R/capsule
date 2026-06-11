@@ -230,11 +230,11 @@ function InstallStrip() {
   return (
     <div className="lp-install">
       <span className="p">$</span>
-      <span>npm i -g capsule-cli</span>
+      <span>pip install capsule-trace</span>
       <button
         aria-label="Copy install command"
         onClick={() => {
-          navigator.clipboard?.writeText('npm i -g capsule-cli');
+          navigator.clipboard?.writeText('pip install capsule-trace');
           setCopied(true);
           setTimeout(() => setCopied(false), 1400);
         }}
@@ -252,9 +252,9 @@ function InstallStrip() {
 /* ─── Data ────────────────────────────────────────────────── */
 const HOW = [
   { n: '01', title: 'Capture', desc: 'One decorator wraps your agent. Every LLM call, tool use, and memory write is recorded — zero code changes.', code: '@capsule.trace\ndef agent(input):\n    ...' },
-  { n: '02', title: 'Replay', desc: 'Re-run any failure deterministically from stored cassettes — no live API calls, bit-exact output.', code: '$ capsule replay \\\n    sess_8f2a' },
-  { n: '03', title: 'Branch', desc: 'Fork at any step. Swap a prompt, model, or tool response and run the alternative live.', code: '$ capsule branch \\\n    --from-step 5' },
-  { n: '04', title: 'Share', desc: 'Export a portable .capsule file and attach it to any bug report. Reproducible anywhere.', code: '$ capsule export \\\n    --out bug.capsule' },
+  { n: '02', title: 'Replay', desc: 'Re-run any failure deterministically from stored cassettes — no live API calls, bit-exact output.', code: '$ capsule-trace replay \\\n    sess_8f2a' },
+  { n: '03', title: 'Branch', desc: 'Fork at any step. Swap a prompt, model, or tool response and run the alternative live.', code: '$ capsule-trace branch \\\n    --from-step 5' },
+  { n: '04', title: 'Share', desc: 'Export a portable .capsule file and attach it to any bug report. Reproducible anywhere.', code: '$ capsule-trace export \\\n    --out bug.capsule' },
 ];
 
 const FEATURES = [
@@ -275,7 +275,7 @@ const FEATURES = [
 const COMPLIANCE = [
   { title: 'EU AI Act', desc: 'Article 12 logging — signed, exportable audit trails.',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" /><path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg> },
-  { title: 'SOC 2', desc: 'Type II controls across security and availability.',
+  { title: 'SOC 2 in progress', desc: 'Type II controls underway across security and availability.',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg> },
   { title: 'GDPR', desc: 'Configurable PII redaction at capture time.',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.6" /><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.6" /></svg> },
@@ -284,12 +284,14 @@ const COMPLIANCE = [
 ];
 
 const PLANS = [
-  { name: 'Hobby', price: '$0', unit: '/ mo', desc: 'For side projects and trying out deterministic replay.', cta: 'Start free', featured: false,
-    features: ['1,000 captured sessions / mo', '7-day retention', 'Replay & branch · CLI + web', 'Community support'] },
-  { name: 'Pro', price: '$49', unit: '/ mo', desc: 'For teams debugging agents in production.', cta: 'Start 14-day trial', featured: true, pop: 'Popular',
-    features: ['100,000 sessions / mo', '90-day retention · unlimited branches', 'Shared workspaces & bug-report links', 'Priority email support'] },
-  { name: 'Enterprise', price: 'Custom', unit: '', desc: 'For fintech & legal teams with compliance needs.', cta: 'Talk to sales', featured: false,
-    features: ['Unlimited sessions & retention', 'EU AI Act audit exports · SOC 2 report', 'Self-host / VPC deployment · SSO', 'Dedicated solutions engineer'] },
+  { name: 'Free', price: '$0', unit: '/ mo', desc: 'For trying deterministic replay locally.', cta: 'Start free', featured: false,
+    features: ['Local SDK only', '1,000 sessions / mo', '7-day retention', 'Community support'] },
+  { name: 'Hobby', price: '$49', unit: '/ mo', desc: 'For solo builders shipping to production.', cta: 'Start free', featured: false,
+    features: ['Cloud storage', '3 team members', '30-day retention', 'Email support'] },
+  { name: 'Pro', price: '$199', unit: '/ mo', desc: 'For teams debugging agents in production.', cta: 'Start 14-day trial', featured: true, pop: 'Popular',
+    features: ['Unlimited sessions', '10 team members', '90-day retention', 'Priority support'] },
+  { name: 'Enterprise', price: 'Custom', unit: '', desc: 'For regulated teams with compliance needs.', cta: 'Talk to sales', featured: false,
+    features: ['Self-host / VPC deployment', 'SSO', 'Compliance reports', 'SLA'] },
 ];
 
 const CHECK = (
@@ -325,7 +327,7 @@ export default function LandingPage() {
             </div>
             <div className="reveal"><InstallStrip /></div>
             <div className="lp-trustline reveal">
-              <span>SOC 2</span><span className="dot" />
+              <span>SOC 2 in progress</span><span className="dot" />
               <span>EU AI Act ready</span><span className="dot" />
               <span>Self-host available</span>
             </div>
@@ -435,13 +437,13 @@ export default function LandingPage() {
             </div>
             <pre className="cb-body">
 <span style={{ color: 'var(--text-tertiary)' }}>{'# replay a failed production session'}</span>{'\n'}
-<span style={{ color: 'var(--replay)' }}>$</span> capsule replay sess_8f2a91c4{'\n'}
+<span style={{ color: 'var(--replay)' }}>$</span> capsule-trace replay sess_8f2a91c4{'\n'}
 {'  ✓ 23 steps · hash match · 0.31s\n\n'}
 <span style={{ color: 'var(--text-tertiary)' }}>{'# branch at the failing step'}</span>{'\n'}
-<span style={{ color: 'var(--replay)' }}>$</span> capsule branch sess_8f2a91c4 --from-step 5{'\n'}
+<span style={{ color: 'var(--replay)' }}>$</span> capsule-trace branch sess_8f2a91c4 --from-step 5{'\n'}
 {'  ↳ branch fix-schema created\n\n'}
 <span style={{ color: 'var(--text-tertiary)' }}>{'# export a portable bug report'}</span>{'\n'}
-<span style={{ color: 'var(--replay)' }}>$</span> capsule export sess_8f2a91c4 --out bug.capsule{'\n'}
+<span style={{ color: 'var(--replay)' }}>$</span> capsule-trace export sess_8f2a91c4 --out bug.capsule{'\n'}
 <span style={{ color: 'var(--success)' }}>{'  ✓ wrote bug.capsule (2.4 MB)'}</span>
             </pre>
           </div>

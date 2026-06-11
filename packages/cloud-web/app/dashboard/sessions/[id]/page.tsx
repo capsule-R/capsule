@@ -2,10 +2,14 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
+import { ToastHost, showToast } from '@/components/Toast';
 import {
   apiFetch,
   getPrimaryWorkspace,
   downloadSessionCapsule,
+  startReplay,
+  getReplayStatus,
+  createBranch,
   formatUSD,
   relativeTime,
 } from '@/lib/capsule';
@@ -213,6 +217,77 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   const [speed, setSpeed] = useState(1);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Cloud replay job state
+  const [replaying, setReplaying] = useState(false);
+  const [replayBanner, setReplayBanner] = useState<
+    { kind: 'success' | 'warn' | 'error'; text: string } | null
+  >(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fork-at-step modal state
+  const [forkStep, setForkStep] = useState<number | null>(null);
+  const [forkNote, setForkNote] = useState('');
+  const [forking, setForking] = useState(false);
+  const [hoverStep, setHoverStep] = useState<number | null>(null);
+
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+  }, []);
+
+  const handleReplay = async () => {
+    if (!workspaceId || replaying) return;
+    setReplaying(true);
+    setReplayBanner(null);
+    const { replayId, error } = await startReplay(workspaceId, sessionId);
+    if (!replayId) {
+      setReplaying(false);
+      setReplayBanner({ kind: 'error', text: `Replay failed — ${error ?? 'could not start replay'}` });
+      return;
+    }
+    const startedAt = Date.now();
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - startedAt > 60_000) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setReplaying(false);
+        setReplayBanner({ kind: 'error', text: 'Replay failed — timed out' });
+        return;
+      }
+      const st = await getReplayStatus(replayId);
+      if (!st || st.status === 'queued' || st.status === 'running') return;
+      if (pollRef.current) clearInterval(pollRef.current);
+      setReplaying(false);
+      if (st.status === 'completed') {
+        setReplayBanner(
+          st.result?.is_deterministic
+            ? { kind: 'success', text: 'Replay complete — deterministic ✓' }
+            : { kind: 'warn', text: 'Replay complete — mismatch detected' },
+        );
+      } else {
+        setReplayBanner({ kind: 'error', text: `Replay failed — ${st.error ?? 'unknown error'}` });
+      }
+    }, 2000);
+  };
+
+  const handleFork = async () => {
+    if (!workspaceId || forkStep === null || forking) return;
+    setForking(true);
+    const { branchId, error } = await createBranch(workspaceId, sessionId, forkStep, forkNote.trim());
+    setForking(false);
+    if (branchId) {
+      setForkStep(null);
+      setForkNote('');
+      showToast('Branch created', 'success', { label: 'View branches', href: '/dashboard/branches' });
+    } else {
+      showToast(error ?? 'Could not create branch', 'error');
+    }
+  };
+
+  const copySessionId = () => {
+    navigator.clipboard?.writeText(sessionId).then(() => {
+      showToast('Session ID copied', 'info');
+    });
+  };
+
   useEffect(() => {
     async function loadData() {
       const ws = await getPrimaryWorkspace();
@@ -258,9 +333,14 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
             // Inputs / outputs live in the typed payload (LLM messages / tool args, etc.)
             const input = asText(p.messages?.length ? p.messages : p.arguments ?? p.input);
             const output = asText(p.response ?? p.result ?? p.output ?? p.value);
-            const error = et === 'error'
+            const trace = p.stack_trace || p.traceback;
+            let error = et === 'error'
               ? (p.error_message || p.error_type || asText(p.error))
               : (typeof p.error === 'string' ? p.error : undefined);
+            if (error && p.error_type && !error.startsWith(String(p.error_type))) {
+              error = `${p.error_type}: ${error}`;
+            }
+            if (error && trace) error = `${error}\n\n${trace}`;
 
             const meta: { k: string; v: string }[] = [];
             if (p.provider) meta.push({ k: 'provider', v: String(p.provider) });
@@ -359,7 +439,13 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
       {/* Header */}
       <div className="page-head" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{sessionId}</span>
+          <span
+            onClick={copySessionId}
+            title="Click to copy session ID"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}
+          >
+            {sessionId}
+          </span>
           <span className={`badge ${isOk ? 'ok' : 'err'}`}><span className="d" />{meta?.status ?? '—'}</span>
           {[
             { icon: '🤖', label: meta?.agent_name || '—' },
@@ -374,16 +460,61 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           ))}
         </div>
         <div className="flex gap-8">
-          <button className="btn btn-ghost btn-sm" onClick={() => { setActive(0); setPlaying(true); }} disabled={STEPS.length === 0}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
-            Replay
+          <button className="btn btn-primary btn-sm" onClick={handleReplay} disabled={replaying}>
+            {replaying ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.9s linear infinite' }}>
+                  <path d="M12 3a9 9 0 1 1-9 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                Replaying…
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
+                Replay
+              </>
+            )}
           </button>
           <button className="btn btn-ghost btn-sm" onClick={handleDownload} disabled={downloading}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            {downloading ? 'Preparing…' : 'Export .capsule'}
+            {downloading ? 'Exporting…' : 'Export'}
           </button>
         </div>
       </div>
+
+      {/* Replay result banner */}
+      {replayBanner && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '11px 16px',
+            marginBottom: 16,
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 13.5,
+            background:
+              replayBanner.kind === 'success' ? 'rgba(34,197,94,0.1)'
+                : replayBanner.kind === 'warn' ? 'rgba(245,158,11,0.1)'
+                  : 'rgba(239,68,68,0.1)',
+            color:
+              replayBanner.kind === 'success' ? 'var(--success)'
+                : replayBanner.kind === 'warn' ? 'var(--warn)'
+                  : 'var(--error)',
+          }}
+        >
+          <span style={{ flex: 1 }}>{replayBanner.text}</span>
+          <button
+            aria-label="Dismiss"
+            onClick={() => setReplayBanner(null)}
+            style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 2, display: 'grid', placeItems: 'center' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Replay scrubber card */}
       <div className="card" style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
@@ -448,20 +579,46 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
             <div
               key={i}
               onClick={() => setActive(i)}
+              onMouseEnter={() => setHoverStep(i)}
+              onMouseLeave={() => setHoverStep((h) => (h === i ? null : h))}
               style={{
                 padding: '10px 16px',
                 cursor: 'pointer',
                 borderBottom: '1px solid var(--border-subtle)',
                 background: i === active ? 'color-mix(in oklab, var(--accent) 6%, transparent)' : 'transparent',
-                borderLeft: `3px solid ${i === active ? KIND_COLOR[s.kind] : 'transparent'}`,
+                borderLeft: `3px solid ${s.status === 'err' ? 'var(--error)' : i === active ? KIND_COLOR[s.kind] : 'transparent'}`,
                 transition: 'background 0.1s',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[s.status], flexShrink: 0 }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: i === active ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: i === active ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: s.status === 'err' ? 'var(--error)' : i === active ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: i === active ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {s.label}
                 </span>
+                <button
+                  aria-label={`Fork from step ${i + 1}`}
+                  title={`Fork from step ${i + 1}`}
+                  onClick={(e) => { e.stopPropagation(); setForkStep(i); setForkNote(''); }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--text-tertiary)',
+                    cursor: 'pointer',
+                    padding: 2,
+                    display: 'grid',
+                    placeItems: 'center',
+                    opacity: hoverStep === i ? 1 : 0,
+                    transition: 'opacity 0.12s',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                    <circle cx="6" cy="6" r="2.4" stroke="currentColor" strokeWidth="1.7" />
+                    <circle cx="18" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.7" />
+                    <circle cx="6" cy="18" r="2.4" stroke="currentColor" strokeWidth="1.7" />
+                    <path d="M6 8.4v3.6a3 3 0 0 0 3 3h6.6" stroke="currentColor" strokeWidth="1.7" />
+                  </svg>
+                </button>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, paddingLeft: 14 }}>
                 <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{s.sub}</span>
@@ -542,6 +699,45 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           </div>
         </div>
       </div>
+
+      {/* Fork-at-step modal */}
+      {forkStep !== null && (
+        <div className="modal-overlay" onClick={() => !forking && setForkStep(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Fork from step {forkStep + 1}</h2>
+              <button className="modal-close" aria-label="Close" onClick={() => !forking && setForkStep(null)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 7, color: 'var(--text-secondary)' }}>
+                Note <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(optional)</span>
+              </label>
+              <textarea
+                className="input"
+                rows={3}
+                placeholder="e.g. retry with temperature=0"
+                value={forkNote}
+                onChange={(e) => setForkNote(e.target.value)}
+                style={{ resize: 'vertical', fontFamily: 'var(--font-body)' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setForkStep(null)} disabled={forking}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleFork} disabled={forking}>
+                {forking ? 'Creating…' : 'Create branch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ToastHost />
     </DashboardShell>
   );
 }

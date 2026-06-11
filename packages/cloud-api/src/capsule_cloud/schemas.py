@@ -182,6 +182,26 @@ class ReplayResponse(BaseModel):
     created_at: datetime
 
 
+class ReplayStatusResponse(BaseModel):
+    """Polled status of a previously-triggered replay job."""
+
+    replay_id: str
+    status: str  # queued | running | completed | failed
+    result: dict | None = None
+    error: str | None = None
+
+
+# ── Branches ─────────────────────────────────────────────────
+
+class BranchCreateRequest(BaseModel):
+    from_step: int = Field(ge=0)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class BranchCreateResponse(BaseModel):
+    branch_id: str
+
+
 # ── API Keys ─────────────────────────────────────────────────
 
 class CreateApiKeyRequest(BaseModel):

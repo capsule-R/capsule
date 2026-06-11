@@ -123,7 +123,7 @@ export default function ApiKeysPage() {
         <div className="cb-bar">
           <span className="cb-tag">SDK init</span>
         </div>
-        <pre className="cb-body"><span style={{ color: 'var(--replay)' }}>import</span> capsule{'\n'}capsule.init(api_key=<span style={{ color: 'var(--success)' }}>&quot;csk_your_key_here&quot;</span>, workspace_id=<span style={{ color: 'var(--success)' }}>&quot;{workspaceId ?? 'ws_xxxxxxxx'}&quot;</span>)</pre>
+        <pre className="cb-body"><span style={{ color: 'var(--replay)' }}>import</span> capsule_trace as capsule{'\n'}capsule.init(api_key=<span style={{ color: 'var(--success)' }}>&quot;csk_your_key_here&quot;</span>, workspace_id=<span style={{ color: 'var(--success)' }}>&quot;{workspaceId ?? 'ws_xxxxxxxx'}&quot;</span>)</pre>
       </div>
 
       {/* Keys table */}

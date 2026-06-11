@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { DashboardShell } from '@/components/DashboardShell';
+import { OnboardingCard } from '@/components/OnboardingCard';
 import Link from 'next/link';
 import {
   apiFetch,
@@ -118,8 +119,22 @@ export default function DashboardPage() {
   const failureRate = total > 0 ? ((failed / total) * 100).toFixed(1) : '0';
   const hasSessions = total > 0;
 
+  // First-run onboarding: visible until the first session lands, then
+  // permanently dismissed via localStorage.
+  const [onboardingDone, setOnboardingDone] = useState(true);
+  useEffect(() => {
+    if (statsLoading || !stats) return;
+    if (stats.total > 0) {
+      localStorage.setItem('capsule_onboarding_done', '1');
+      setOnboardingDone(true);
+    } else {
+      setOnboardingDone(localStorage.getItem('capsule_onboarding_done') === '1');
+    }
+  }, [statsLoading, stats]);
+  const showOnboarding = !statsLoading && total === 0 && !onboardingDone;
+
   return (
-    <DashboardShell active="overview" title="Overview" crumb="workspace / overview" action={{ label: 'New capture', href: '/dashboard/settings/api-keys' }}>
+    <DashboardShell active="overview" title="Overview" crumb="workspace / overview" action={{ label: 'New capture', href: '/dashboard/sessions?upload=1' }}>
       {/* Header row */}
       <div className="page-head">
         <div>
@@ -185,6 +200,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* First-run onboarding */}
+      {showOnboarding && <OnboardingCard />}
 
       {/* Chart + Attention */}
       <div className="dash-chart-grid">
@@ -280,7 +298,7 @@ export default function DashboardPage() {
             <div style={{ fontWeight: 600, fontSize: 14.5 }}>Add capture to another service</div>
             <div style={{ marginTop: 4 }}>
               <span style={{ color: 'var(--replay)', fontFamily: 'var(--font-cli)' }}>$</span>{' '}
-              <code style={{ fontFamily: 'var(--font-cli)', fontSize: 13 }}>capsule init --project billing-agent</code>
+              <code style={{ fontFamily: 'var(--font-cli)', fontSize: 13 }}>capsule-trace login --api-key YOUR_KEY</code>
             </div>
           </div>
         </div>

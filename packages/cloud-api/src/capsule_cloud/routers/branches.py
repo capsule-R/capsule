@@ -8,6 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/branches", tags=["branches"])
 
+# In-process branch registry, keyed by workspace_id. Populated by the
+# session branch endpoint in sessions.py until DB persistence lands.
+BRANCH_STORE: dict[str, List[Dict]] = {}
+
+
 @router.get("", response_model=List[Dict])
 async def list_branches(
     workspace_id: str,
@@ -16,9 +21,8 @@ async def list_branches(
 ):
     """List branches for a workspace.
 
-    Branches are produced by forking a session in the replay engine, which is
-    not yet wired into the cloud. Until persistence lands, this returns an empty
-    list rather than mock data — the UI renders its real "no branches" state.
+    Branches created via the session fork endpoint are tracked in an
+    in-process store until replay-engine persistence lands.
     """
     await get_workspace_member(workspace_id, current_user, db)
-    return []
+    return BRANCH_STORE.get(workspace_id, [])
