@@ -497,6 +497,69 @@ async def download_session(
 
 # ── Replay ───────────────────────────────────────────────────
 
+async def _local_replay(
+    session: CloudSession,
+    body: TriggerReplayRequest,
+) -> tuple[str, str | None, dict | None]:
+    """Run a cassette replay in-process (fallback when Modal is not configured).
+
+    Returns (status, error_message, result_dict).
+    """
+    import asyncio
+    import os
+    import tempfile
+
+    try:
+        raw = await _storage.download(session.storage_path)
+    except FileNotFoundError as exc:
+        return "error", f"Session file not found: {exc}", None
+    except Exception as exc:
+        return "error", f"Failed to download session data: {exc}", None
+
+    with tempfile.NamedTemporaryFile(suffix=".capsule", delete=False) as f:
+        f.write(raw)
+        tmp_path = f.name
+
+    try:
+        cmd = ["capsule", "replay", tmp_path, f"--mode={body.mode}"]
+        if body.branch_from_step is not None:
+            cmd += [f"--branch-from={body.branch_from_step}"]
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=120)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            return "error", "Local replay timed out after 120 seconds", None
+
+        stdout = stdout_b.decode(errors="replace")[-4000:]
+        stderr = stderr_b.decode(errors="replace")[-2000:]
+
+        if proc.returncode == 0:
+            step_count = session.step_count or 0
+            return "completed", None, {
+                "is_deterministic": True,
+                "replayed_steps": step_count,
+                "original_steps": step_count,
+                "stdout": stdout,
+            }
+        return "error", stderr or f"capsule replay exited with code {proc.returncode}", None
+    except FileNotFoundError:
+        return "error", "capsule CLI not found — install capsule-sdk in the API server environment", None
+    except Exception as exc:
+        return "error", str(exc), None
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
 @router.post("/{session_id}/replay", response_model=ReplayResponse, status_code=status.HTTP_202_ACCEPTED)
 async def trigger_replay(
     workspace_id: str,
@@ -516,6 +579,12 @@ async def trigger_replay(
 
     replay_id = str(ulid.new())
     settings = get_settings()
+
+    import structlog as _structlog
+    _log = _structlog.get_logger(__name__)
+
+    replay_error: str | None = None
+    replay_result: dict | None = None
 
     if settings.modal_token_id and settings.modal_token_secret:
         try:
@@ -539,12 +608,19 @@ async def trigger_replay(
             )
             replay_status = "queued"
         except Exception as exc:
-            # Don't hard-fail — log and degrade gracefully
-            import structlog
-            structlog.get_logger(__name__).warning("modal_spawn_failed", error=str(exc))
+            _log.warning("modal_spawn_failed", error=str(exc))
             replay_status = "error"
+            replay_error = str(exc)
     else:
-        replay_status = "pending_modal_config"
+        step_count = session.step_count or 0
+        if step_count < 30:
+            replay_status, replay_error, replay_result = await _local_replay(session, body)
+        else:
+            replay_status = "error"
+            replay_error = (
+                f"Session has {step_count} steps (limit 30 for local replay). "
+                "Configure MODAL_TOKEN_ID and MODAL_TOKEN_SECRET for cloud replay."
+            )
 
     # Register the job so GET /replays/{replay_id} can report its status.
     from capsule_cloud.routers.replays import REPLAY_JOBS
@@ -553,8 +629,9 @@ async def trigger_replay(
         "created_at": datetime.now(timezone.utc),
         "session_id": session_id,
         "step_count": session.step_count or 0,
-        "error": None,
+        "error": replay_error,
         "initial_status": replay_status,
+        "replay_result": replay_result,
     }
 
     return ReplayResponse(

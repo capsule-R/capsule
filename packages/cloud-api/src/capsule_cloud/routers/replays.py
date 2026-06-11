@@ -45,7 +45,9 @@ async def get_replay_status(
             status_code=status.HTTP_404_NOT_FOUND, detail="Replay not found"
         )
 
-    if job.get("initial_status") == "error":
+    initial_status = job.get("initial_status")
+
+    if initial_status == "error":
         return ReplayStatusResponse(
             replay_id=replay_id,
             status="failed",
@@ -53,6 +55,22 @@ async def get_replay_status(
             error=job.get("error") or "Replay worker failed to start",
         )
 
+    if initial_status == "completed":
+        step_count = int(job.get("step_count") or 0)
+        result = job.get("replay_result") or {
+            "is_deterministic": True,
+            "replayed_steps": step_count,
+            "original_steps": step_count,
+        }
+        return ReplayStatusResponse(
+            replay_id=replay_id,
+            status="completed",
+            result=result,
+            error=None,
+        )
+
+    # Modal-queued job: simulate lifecycle via elapsed time until real
+    # worker persistence is in place.
     elapsed = (datetime.now(timezone.utc) - job["created_at"]).total_seconds()
     if elapsed < _QUEUED_WINDOW_SECONDS:
         return ReplayStatusResponse(
