@@ -590,7 +590,7 @@ async def trigger_replay(
         try:
             import modal  # type: ignore[import-untyped]
 
-            run_replay = modal.Function.lookup("capsule-replay", "run_replay")
+            run_replay = modal.Function.from_name("capsule-replay", "run_replay")
             await run_replay.spawn.aio(
                 storage_path=session.storage_path,
                 mode=body.mode,
