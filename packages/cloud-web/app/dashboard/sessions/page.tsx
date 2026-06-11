@@ -45,6 +45,7 @@ export default function SessionsPage() {
   const [page, setPage] = useState(1);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const PER = 10;
 
   // Auto-open the upload modal when arriving via "+ New capture" (?upload=1)
@@ -156,7 +157,7 @@ export default function SessionsPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="sessions-filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div className="segmented">
           {([['all', 'All'], ['ok', 'Completed'], ['err', 'Failed']] as const).map(([s, label]) => (
             <button key={s} className={status === s ? 'active' : ''} onClick={() => { setStatus(s); setPage(1); }}>
@@ -164,24 +165,41 @@ export default function SessionsPage() {
             </button>
           ))}
         </div>
-        <div className="select-wrap">
-          <select className="select" value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }}
-            style={{ width: 'auto', padding: '9px 34px 9px 14px' }}>
-            <option value="">All agents</option>
-            {agents.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+        
+        <button className="btn btn-subtle mobile-filter-btn" onClick={() => setShowFilters(true)}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+          Filters
+        </button>
+
+        {showFilters && <div className="modal-overlay" onClick={() => setShowFilters(false)} style={{ zIndex: 90 }} />}
+        
+        <div className={`filters-desktop ${showFilters ? 'mobile-open' : ''}`}>
+          {showFilters && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600 }}>Filters</h3>
+              <button className="modal-close" onClick={() => setShowFilters(false)}>✕</button>
+            </div>
+          )}
+          <div className="select-wrap">
+            <select className="select" value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }}
+              style={{ width: 'auto', padding: '9px 34px 9px 14px' }}>
+              <option value="">All agents</option>
+              {agents.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="select-wrap">
+            <select className="select" value={dateRange} onChange={(e) => { setDateRange(e.target.value); setPage(1); }}
+              style={{ width: 'auto', padding: '9px 34px 9px 14px' }}>
+              <option value="30d">Last 30 days</option>
+              <option value="7d">Last 7 days</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
         </div>
-        <div className="select-wrap">
-          <select className="select" value={dateRange} onChange={(e) => { setDateRange(e.target.value); setPage(1); }}
-            style={{ width: 'auto', padding: '9px 34px 9px 14px' }}>
-            <option value="30d">Last 30 days</option>
-            <option value="7d">Last 7 days</option>
-            <option value="24h">Last 24 hours</option>
-            <option value="all">All time</option>
-          </select>
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '9px 13px', width: 260, color: 'var(--text-tertiary)' }}>
+
+        <div className="filter-spacer" style={{ flex: 1 }} />
+        <div className="search-wrap" style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '9px 13px', width: 260, color: 'var(--text-tertiary)' }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.7"/><path d="M16 16l4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
           <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search by session ID…"
             style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14, width: '100%' }} />
@@ -189,7 +207,7 @@ export default function SessionsPage() {
       </div>
 
       {/* Summary bar */}
-      <div style={{ display: 'flex', gap: 26, padding: '16px 18px', border: '1px solid var(--border-default)', borderBottom: 'none', borderRadius: 'var(--radius) var(--radius) 0 0', background: 'var(--bg-base)' }}>
+      <div className="sessions-summary" style={{ display: 'flex', gap: 26, padding: '16px 18px', border: '1px solid var(--border-default)', borderBottom: 'none', borderRadius: 'var(--radius) var(--radius) 0 0', background: 'var(--bg-base)' }}>
         {[
           { label: 'Showing', val: `${filtered.length} sessions`, style: {} },
           { label: 'Completed', val: String(okCount), style: { color: 'var(--success)' } },
@@ -205,7 +223,7 @@ export default function SessionsPage() {
       <div className="table-wrap" style={{ borderRadius: '0 0 var(--radius) var(--radius)' }}>
         <table className="tbl">
           <thead><tr>
-            <th>Session</th><th>Agent</th><th>Steps</th><th>Status</th><th>Duration</th><th>Cost</th><th>Captured</th><th style={{ textAlign: 'right' }}>Actions</th>
+            <th>Session</th><th>Agent</th><th>Steps</th><th>Status</th><th className="hide-mobile">Duration</th><th className="hide-mobile">Cost</th><th>Captured</th><th style={{ textAlign: 'right' }}>Actions</th>
           </tr></thead>
           <tbody>
             {loading ? (
@@ -216,7 +234,7 @@ export default function SessionsPage() {
               <tr><td colSpan={8}><div className="empty">No sessions match these filters.</div></td></tr>
             ) : slice.map((s) => (
               <tr key={s.id} className="clickable" onClick={() => window.location.href = `/dashboard/sessions/${s.id}`}>
-                <td className="cell-mono">{s.id}</td>
+                <td className="cell-mono"><div className="truncate-mobile" style={{ maxWidth: 120 }}>{s.id}</div></td>
                 <td>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: agentColor(s.agent), display: 'inline-block' }} />
@@ -225,8 +243,8 @@ export default function SessionsPage() {
                 </td>
                 <td className="cell-mono">{s.steps}</td>
                 <td><span className={`badge ${s.ok ? 'ok' : 'err'}`}><span className="d" />{s.statusLabel}</span></td>
-                <td className="cell-mono">{s.dur}</td>
-                <td className="cell-mono">{s.cost}</td>
+                <td className="cell-mono hide-mobile">{s.dur}</td>
+                <td className="cell-mono hide-mobile">{s.cost}</td>
                 <td className="cell-sub">{s.when}</td>
                 <td>
                   <div className="row-actions" onClick={(e) => e.stopPropagation()}>

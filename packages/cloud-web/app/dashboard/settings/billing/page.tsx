@@ -234,7 +234,7 @@ export default function BillingPage() {
               <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>{CONTACT_EMAIL}</a>.
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+            <div className="plan-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
               {PLANS.map((plan) => {
                 const isCurrent = plan.id === current.id;
                 return (

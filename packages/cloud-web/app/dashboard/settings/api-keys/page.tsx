@@ -134,7 +134,7 @@ export default function ApiKeysPage() {
         <table className="tbl">
           <thead>
             <tr>
-              <th>Name</th><th>Key prefix</th><th>Created</th><th>Last used</th><th style={{ textAlign: 'right' }}>Actions</th>
+              <th>Name</th><th>Key prefix</th><th className="hide-mobile">Created</th><th className="hide-mobile">Last used</th><th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -148,8 +148,8 @@ export default function ApiKeysPage() {
                 <td>
                   <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>{k.key_prefix}…</code>
                 </td>
-                <td className="cell-sub">{fmt(k.created_at)}</td>
-                <td className="cell-sub">{fmt(k.last_used_at)}</td>
+                <td className="cell-sub hide-mobile">{fmt(k.created_at)}</td>
+                <td className="cell-sub hide-mobile">{fmt(k.last_used_at)}</td>
                 <td>
                   <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
                     <button

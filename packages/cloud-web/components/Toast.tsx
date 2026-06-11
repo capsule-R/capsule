@@ -61,18 +61,7 @@ export function ToastHost() {
   if (toasts.length === 0) return null;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 24,
-        right: 24,
-        zIndex: 300,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        maxWidth: 380,
-      }}
-    >
+    <div className="toast-container">
       {toasts.map((t) => (
         <div
           key={t.id}

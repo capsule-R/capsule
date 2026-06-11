@@ -211,6 +211,9 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   const [notFound, setNotFound] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  
+  const [mobileTab, setMobileTab] = useState<'steps' | 'inspector'>('steps');
+  const [infoExpanded, setInfoExpanded] = useState(false);
 
   const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -437,8 +440,8 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   return (
     <DashboardShell active="sessions" title="Session" crumb={`workspace / sessions / ${sessionId}`}>
       {/* Header */}
-      <div className="page-head" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div className="page-head session-detail-header" style={{ marginBottom: 20 }}>
+        <div className="sdh-left" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span
             onClick={copySessionId}
             title="Click to copy session ID"
@@ -459,7 +462,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
             </span>
           ))}
         </div>
-        <div className="flex gap-8">
+        <div className="sdh-actions flex gap-8">
           <button className="btn btn-primary btn-sm" onClick={handleReplay} disabled={replaying}>
             {replaying ? (
               <>
@@ -565,11 +568,49 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
         )}
       </div>
 
+      {/* Mobile session info & tabs */}
+      <div className="session-mobile-info">
+        <div className="card" onClick={() => setInfoExpanded(!infoExpanded)} style={{ marginBottom: 16, cursor: 'pointer', padding: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Session Info</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className={`badge ${isOk ? 'ok' : 'err'}`}><span className="d" />{meta?.status ?? '—'}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ transform: infoExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          {infoExpanded && (
+            <div style={{ marginTop: 16, borderTop: '1px solid var(--border-subtle)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { k: 'ID', v: sessionId },
+                { k: 'Agent', v: meta?.agent_name || '—' },
+                { k: 'Steps', v: String(meta?.step_count ?? 0) },
+                { k: 'Duration', v: fmtDuration(meta?.duration_ms) },
+                { k: 'Cost', v: formatUSD(meta?.total_cost_usd) },
+                { k: 'Captured', v: relativeTime(meta?.uploaded_at) },
+                { k: 'Agent version', v: meta?.agent_version || '—' },
+              ].map(({ k, v }) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{k}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="segmented" style={{ width: '100%', marginBottom: 16 }}>
+          <button className={mobileTab === 'steps' ? 'active' : ''} onClick={() => setMobileTab('steps')} style={{ flex: 1 }}>Steps</button>
+          <button className={mobileTab === 'inspector' ? 'active' : ''} onClick={() => setMobileTab('inspector')} style={{ flex: 1 }}>Inspector</button>
+        </div>
+      </div>
+
       {/* Three-column layout */}
-      <div className="session-detail-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr 260px', gap: 12, alignItems: 'start' }}>
+      <div className={`session-detail-grid ${mobileTab === 'steps' ? 'mobile-show-steps' : 'mobile-show-inspector'}`}>
 
         {/* Step list */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="card sd-step-list" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Steps
           </div>
@@ -578,7 +619,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           ) : STEPS.map((s, i) => (
             <div
               key={i}
-              onClick={() => setActive(i)}
+              onClick={() => { setActive(i); setMobileTab('inspector'); }}
               onMouseEnter={() => setHoverStep(i)}
               onMouseLeave={() => setHoverStep((h) => (h === i ? null : h))}
               style={{
@@ -629,7 +670,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
         </div>
 
         {/* Detail panel */}
-        <div className="card">
+        <div className="card sd-detail-panel">
           {step ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
@@ -668,7 +709,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
         </div>
 
         {/* Right sidebar */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="sd-right-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Session info */}
           <div className="card">
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Session info</div>

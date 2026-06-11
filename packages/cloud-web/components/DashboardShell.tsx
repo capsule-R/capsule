@@ -64,6 +64,12 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
     getCurrentUser().then(setUser);
   }, []);
 
+  useEffect(() => {
+    if (sidebarOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [sidebarOpen]);
+
   const displayName = user?.full_name || user?.email?.split('@')[0] || '…';
   const displayEmail = user?.email || '';
   const avatarText = user ? initials(user.full_name, user.email) : '…';
@@ -93,6 +99,7 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
                   key={item.id}
                   href={item.href}
                   className={`nav-item${item.id === active ? ' active' : ''}`}
+                  data-label={item.label}
                 >
                   {item.icon}
                   <span>{item.label}</span>
@@ -102,7 +109,7 @@ export function DashboardShell({ active, title, crumb, action, children }: Dashb
           ))}
 
           <div className="nav-group" style={{ marginTop: 'auto' }}>
-            <Link className={`nav-item${'docs' === active ? ' active' : ''}`} href="/dashboard/docs">
+            <Link className={`nav-item${'docs' === active ? ' active' : ''}`} href="/dashboard/docs" data-label="Documentation">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/></svg>
               <span>Documentation</span>
             </Link>

@@ -266,7 +266,7 @@ export default function DashboardPage() {
       <div className="table-wrap">
         <table className="tbl">
           <thead><tr>
-            <th>Session</th><th>Status</th><th>Agent</th><th>Steps</th><th>Duration</th><th>Cost</th><th style={{ textAlign: 'right' }}>Captured</th>
+            <th>Session</th><th>Status</th><th>Agent</th><th>Steps</th><th className="hide-mobile">Duration</th><th className="hide-mobile">Cost</th><th style={{ textAlign: 'right' }}>Captured</th>
           </tr></thead>
           <tbody>
             {sessionsLoading ? (
@@ -279,8 +279,8 @@ export default function DashboardPage() {
                 <td><span className={`badge ${s.status}`}><span className="d" />{s.label}</span></td>
                 <td className="cell-mono" style={{ color: 'var(--text-secondary)' }}>{s.agent}</td>
                 <td className="cell-mono">{s.steps}</td>
-                <td className="cell-mono">{s.dur}</td>
-                <td className="cell-mono">{s.cost}</td>
+                <td className="cell-mono hide-mobile">{s.dur}</td>
+                <td className="cell-mono hide-mobile">{s.cost}</td>
                 <td className="cell-sub" style={{ textAlign: 'right' }}>{s.when}</td>
               </tr>
             ))}
