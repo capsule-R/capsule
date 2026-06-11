@@ -588,15 +588,8 @@ async def trigger_replay(
 
     if settings.modal_token_id and settings.modal_token_secret:
         try:
-            import os as _os
-            _os.environ["MODAL_TOKEN_ID"] = settings.modal_token_id
-            _os.environ["MODAL_TOKEN_SECRET"] = settings.modal_token_secret
-
             import modal  # type: ignore[import-untyped]
             from capsule_cloud.replay_worker import run_replay  # type: ignore[import]
-
-            # Inject credentials so the Modal client uses our account
-            modal.config._profile = None  # reset any cached profile
 
             run_replay.spawn(
                 storage_path=session.storage_path,
