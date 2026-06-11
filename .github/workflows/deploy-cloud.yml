@@ -28,10 +28,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: |
-          docker build -t capsule-api:${{ github.sha }} .
-
       - name: Deploy to Railway (staging)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
