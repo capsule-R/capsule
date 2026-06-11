@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -162,9 +162,9 @@ export default function SignupPage() {
               </span>
               <span>
                 I agree to the{' '}
-                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }}>Terms</a>
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }} onClick={(e) => e.stopPropagation()}>Terms</a>
                 {' '}and{' '}
-                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }}>Privacy Policy</a>.
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }} onClick={(e) => e.stopPropagation()}>Privacy Policy</a>.
               </span>
             </label>
 
