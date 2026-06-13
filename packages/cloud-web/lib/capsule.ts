@@ -145,6 +145,33 @@ export async function resetPassword(
 
 // ── Authenticated fetch ───────────────────────────────────────
 
+let _refreshing: Promise<boolean> | null = null;
+
+async function _tryRefresh(): Promise<boolean> {
+  // Deduplicate concurrent refresh attempts — only one in-flight at a time.
+  if (_refreshing) return _refreshing;
+  const p = (async (): Promise<boolean> => {
+    try {
+      const refresh = getCookie(REFRESH_COOKIE);
+      if (!refresh) return false;
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${refresh}` },
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      setTokens(data.access_token, data.refresh_token, data.expires_in);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      _refreshing = null;
+    }
+  })();
+  _refreshing = p;
+  return p;
+}
+
 export async function apiFetch(
   path: string,
   opts: RequestInit = {},
@@ -155,7 +182,24 @@ export async function apiFetch(
     ...(opts.headers as Record<string, string> | undefined),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(`${API_BASE}${path}`, { ...opts, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+
+  // On 401, attempt a token refresh once and retry the original request.
+  if (res.status === 401 && token) {
+    const refreshed = await _tryRefresh();
+    if (refreshed) {
+      const newToken = getToken();
+      const retryHeaders = { ...headers };
+      if (newToken) retryHeaders['Authorization'] = `Bearer ${newToken}`;
+      return fetch(`${API_BASE}${path}`, { ...opts, headers: retryHeaders });
+    }
+    // Refresh failed — clear tokens so middleware redirects to /login.
+    clearTokens();
+    _userCache = null;
+    if (typeof window !== 'undefined') window.location.href = '/login';
+  }
+
+  return res;
 }
 
 // ── User helpers ─────────────────────────────────────────────
@@ -365,6 +409,7 @@ export interface ReplayResult {
   is_deterministic: boolean;
   replayed_steps: number;
   original_steps: number;
+  stdout?: string;
 }
 
 export interface ReplayStatus {

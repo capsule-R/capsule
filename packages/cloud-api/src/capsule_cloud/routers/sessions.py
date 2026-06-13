@@ -105,11 +105,21 @@ async def upload_session(
     # Compute integrity hash
     integrity_hash = hashlib.sha256(raw).hexdigest()
 
+    # Reject duplicates before doing expensive decompression + storage upload.
+    dup_result = await db.execute(
+        select(CloudSession).where(CloudSession.id == meta.session_id)
+    )
+    if dup_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Session '{meta.session_id}' already exists",
+        )
+
     # Parse the .capsule archive to extract session metadata
     session_json: dict = {}
     try:
         dctx = zstd.ZstdDecompressor()
-        raw_tar = dctx.decompress(raw, max_length=_MAX_DECOMPRESSED_BYTES)
+        raw_tar = dctx.decompress(raw, _MAX_DECOMPRESSED_BYTES)
         with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tar:
             for member in tar.getmembers():
                 if member.name.endswith("session.json"):
@@ -138,7 +148,7 @@ async def upload_session(
     ended_at = _parse_dt(ended_at_raw)
     duration_ms = session_json.get("duration_ms")
     step_count = session_json.get("step_count", 0)
-    status_val = session_json.get("status", "completed")
+    status_val = session_json.get("status", "in_progress")
 
     # Aggregate cost / token usage — the SDK writes these into session.json.
     total_cost_usd = session_json.get("total_cost_usd") or 0
@@ -191,7 +201,8 @@ async def upload_session(
         expires_at=expires_at,
     )
 
-    # Check for duplicate
+    # Second-chance duplicate check: handles race conditions where two
+    # concurrent uploads with the same session_id both passed the early check.
     result = await db.execute(
         select(CloudSession).where(CloudSession.id == meta.session_id)
     )
@@ -352,7 +363,13 @@ async def session_stats(
     for ts in rows:
         if ts is None:
             continue
-        key = ts.date().isoformat()
+        # Normalise to UTC — asyncpg returns timezone-aware datetimes; aiosqlite
+        # may return naive ones. Either way we want the UTC calendar date.
+        if ts.tzinfo is not None:
+            ts_utc = ts.astimezone(timezone.utc)
+        else:
+            ts_utc = ts.replace(tzinfo=timezone.utc)
+        key = ts_utc.date().isoformat()
         if key in buckets:
             buckets[key] += 1
 
@@ -435,8 +452,13 @@ async def get_session_events(
 
     try:
         dctx = zstd.ZstdDecompressor()
-        raw_tar = dctx.decompress(raw, max_length=_MAX_DECOMPRESSED_BYTES)
+        raw_tar = dctx.decompress(raw, _MAX_DECOMPRESSED_BYTES)
+    except Exception:
+        # Archive is corrupt or not zstd-compressed — return empty list per
+        # the non-negotiable: events endpoint must never 500.
+        return []
 
+    try:
         events = []
         with tarfile.open(fileobj=io.BytesIO(raw_tar)) as tar:
             for member in tar.getmembers():
@@ -451,11 +473,11 @@ async def get_session_events(
         # Sort by filename which contains the index (e.g. 0001-tool_call.json)
         events.sort(key=lambda x: x[0])
         return [e[1] for e in events]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to parse capsule archive: {str(e)}"
-        )
+    except Exception:
+        # Malformed tar or JSON inside the archive — return what we have so far
+        # (may be partial) rather than 500.
+        events.sort(key=lambda x: x[0])
+        return [e[1] for e in events]
 
 # ── Download ──────────────────────────────────────────────────
 
