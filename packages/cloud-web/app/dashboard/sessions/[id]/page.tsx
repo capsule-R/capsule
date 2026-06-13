@@ -223,7 +223,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   // Cloud replay job state
   const [replaying, setReplaying] = useState(false);
   const [replayBanner, setReplayBanner] = useState<
-    { kind: 'success' | 'warn' | 'error'; text: string } | null
+    { kind: 'success' | 'warn' | 'error'; text: string; stdout?: string } | null
   >(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -262,8 +262,8 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
       if (st.status === 'completed') {
         setReplayBanner(
           st.result?.is_deterministic
-            ? { kind: 'success', text: 'Replay complete — deterministic ✓' }
-            : { kind: 'warn', text: 'Replay complete — mismatch detected' },
+            ? { kind: 'success', text: 'Replay complete — deterministic ✓', stdout: st.result.stdout }
+            : { kind: 'warn', text: 'Replay complete — mismatch detected', stdout: st.result?.stdout },
         );
       } else {
         setReplayBanner({ kind: 'error', text: `Replay failed — ${st.error ?? 'unknown error'}` });
@@ -489,33 +489,63 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
       {replayBanner && (
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '11px 16px',
             marginBottom: 16,
             borderRadius: 'var(--radius-sm)',
-            fontSize: 13.5,
-            background:
-              replayBanner.kind === 'success' ? 'rgba(34,197,94,0.1)'
-                : replayBanner.kind === 'warn' ? 'rgba(245,158,11,0.1)'
-                  : 'rgba(239,68,68,0.1)',
-            color:
-              replayBanner.kind === 'success' ? 'var(--success)'
-                : replayBanner.kind === 'warn' ? 'var(--warn)'
-                  : 'var(--error)',
+            border: `1px solid ${
+              replayBanner.kind === 'success' ? 'rgba(34,197,94,0.25)'
+                : replayBanner.kind === 'warn' ? 'rgba(245,158,11,0.25)'
+                  : 'rgba(239,68,68,0.25)'
+            }`,
+            overflow: 'hidden',
           }}
         >
-          <span style={{ flex: 1 }}>{replayBanner.text}</span>
-          <button
-            aria-label="Dismiss"
-            onClick={() => setReplayBanner(null)}
-            style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 2, display: 'grid', placeItems: 'center' }}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '11px 16px',
+              fontSize: 13.5,
+              background:
+                replayBanner.kind === 'success' ? 'rgba(34,197,94,0.1)'
+                  : replayBanner.kind === 'warn' ? 'rgba(245,158,11,0.1)'
+                    : 'rgba(239,68,68,0.1)',
+              color:
+                replayBanner.kind === 'success' ? 'var(--success)'
+                  : replayBanner.kind === 'warn' ? 'var(--warn)'
+                    : 'var(--error)',
+            }}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
+            <span style={{ flex: 1 }}>{replayBanner.text}</span>
+            <button
+              aria-label="Dismiss"
+              onClick={() => setReplayBanner(null)}
+              style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 2, display: 'grid', placeItems: 'center' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          {replayBanner.stdout && (
+            <pre style={{
+              margin: 0,
+              padding: '12px 16px',
+              background: 'var(--bg-elevated)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+              overflowX: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              lineHeight: 1.6,
+              borderTop: '1px solid var(--border-subtle)',
+              maxHeight: 240,
+              overflowY: 'auto',
+            }}>
+              {replayBanner.stdout}
+            </pre>
+          )}
         </div>
       )}
 

@@ -68,7 +68,7 @@ export function UploadModal({ workspaceId, open, onClose, onUploaded }: UploadMo
     if (status === 413) setError('File too large for your current plan');
     else if (status === 401) setError('Authentication error — please log in again');
     else if (status === 409) setError(err ?? 'A session with this ID already exists');
-    else setError('Upload failed. Please try again.');
+    else setError(err ?? 'Upload failed. Please try again.');
   };
 
   return (
