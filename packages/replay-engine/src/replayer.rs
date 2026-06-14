@@ -4,7 +4,6 @@ use crate::archive::CapsuleArchive;
 use crate::cassette::CassetteStore;
 use crate::error::ReplayError;
 use crate::event::Event;
-use crate::session::ReplaySession;
 use std::collections::HashMap;
 use std::path::Path;
 

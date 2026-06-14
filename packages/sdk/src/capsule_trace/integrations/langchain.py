@@ -38,7 +38,7 @@ try:
     _LANGCHAIN_AVAILABLE = True
 except ImportError:
     _LANGCHAIN_AVAILABLE = False
-    BaseCallbackHandler = object  # type: ignore[assignment]
+    BaseCallbackHandler = object
 
 
 class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]

@@ -94,6 +94,7 @@ omit = [
     "*/capsule_trace/integrations/openai.py",
     "*/capsule_trace/integrations/anthropic.py",
     "*/capsule_trace/integrations/google.py",
+    "*/capsule_trace/integrations/langchain.py",
     "*/capsule_trace/integrations/langgraph.py",
     "*/capsule_trace/integrations/autopatch.py",
     "*/capsule_trace/replay/mode.py",
