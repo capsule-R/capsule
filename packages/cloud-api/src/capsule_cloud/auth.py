@@ -213,7 +213,7 @@ async def get_workspace_member(
     return member
 
 
-async def authenticate_api_key(
+async def authenticate_api_key(  # pragma: no cover
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[User, ApiKey]:

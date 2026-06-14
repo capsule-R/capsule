@@ -5,10 +5,11 @@ import { redirect } from 'next/navigation';
  * /dashboard/sessions/[id]; this route keeps /workspaces/:id/sessions/:sessionId
  * links working without duplicating the page.
  */
-export default function WorkspaceSessionPage({
+export default async function WorkspaceSessionPage({
   params,
 }: {
-  params: { id: string; sessionId: string };
+  params: Promise<{ id: string; sessionId: string }>;
 }) {
-  redirect(`/dashboard/sessions/${params.sessionId}`);
+  const { sessionId } = await params;
+  redirect(`/dashboard/sessions/${sessionId}`);
 }
