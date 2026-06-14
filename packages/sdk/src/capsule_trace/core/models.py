@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _ulid() -> str:
-    import ulid  # type: ignore[import-untyped]
+    import ulid
 
     return str(ulid.new())
 
@@ -25,7 +24,7 @@ def _ulid() -> str:
 # ──────────────────────────────────────────────────────────────
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     LLM_CALL = "llm_call"
     TOOL_CALL = "tool_call"
     MEMORY_WRITE = "memory_write"
@@ -34,14 +33,14 @@ class EventType(str, Enum):
     USER_MESSAGE = "user_message"
 
 
-class SessionStatus(str, Enum):
+class SessionStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     CONVERSATION = "conversation"
     RAG_CONTEXT = "rag_context"
     SCRATCHPAD = "scratchpad"
@@ -161,8 +160,7 @@ class Event(BaseModel):
 
     def model_dump_json_safe(self) -> dict[str, Any]:
         """Return a JSON-serialisable dict representation."""
-        data = self.model_dump(mode="json")
-        return data
+        return self.model_dump(mode="json")
 
 
 # ──────────────────────────────────────────────────────────────

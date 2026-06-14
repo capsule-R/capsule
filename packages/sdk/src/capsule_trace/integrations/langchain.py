@@ -1,4 +1,4 @@
-﻿"""LangChain callback handler — integrates Capsule capture into any LangChain chain or agent.
+"""LangChain callback handler — integrates Capsule capture into any LangChain chain or agent.
 
 Usage::
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any, Union
+from typing import Any
 from uuid import UUID
 
 from capsule_trace.core.context import get_current_session
@@ -25,8 +25,6 @@ from capsule_trace.core.models import (
     Event,
     EventType,
     LLMCallPayload,
-    LLMMessage,
-    LLMParameters,
     LLMResponse,
     LLMUsage,
     ToolCallPayload,
@@ -35,9 +33,7 @@ from capsule_trace.core.models import (
 logger = logging.getLogger("capsule.integrations.langchain")
 
 try:
-    from langchain_core.callbacks.base import BaseCallbackHandler  # type: ignore[import-untyped]
-    from langchain_core.messages import BaseMessage  # type: ignore[import-untyped]
-    from langchain_core.outputs import LLMResult  # type: ignore[import-untyped]
+    from langchain_core.callbacks.base import BaseCallbackHandler
 
     _LANGCHAIN_AVAILABLE = True
 except ImportError:
@@ -45,7 +41,7 @@ except ImportError:
     BaseCallbackHandler = object  # type: ignore[assignment,misc]
 
 
-class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
+class CapsuleCallbackHandler(BaseCallbackHandler):
     """LangChain callback handler that records LLM calls and tool invocations
     into the current Capsule session.
 

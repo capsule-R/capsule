@@ -1,11 +1,12 @@
-﻿"""@capsule.trace decorator — wraps a function or coroutine in a Session."""
+"""@capsule.trace decorator — wraps a function or coroutine in a Session."""
 
 from __future__ import annotations
 
 import asyncio
 import functools
 import os
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from capsule_trace.core.session import Session
 
@@ -64,25 +65,23 @@ def trace(
 
             return async_wrapper  # type: ignore[return-value]
 
-        else:
+        @functools.wraps(fn)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            if _is_disabled():
+                return fn(*args, **kwargs)
 
-            @functools.wraps(fn)
-            def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-                if _is_disabled():
-                    return fn(*args, **kwargs)
+            session = Session(
+                agent_name=name,
+                agent_version=agent_version,
+                tags=tags,
+                user_metadata=user_metadata,
+                redact=redact,
+                auto_upload=auto_upload,
+                storage_backend=storage_backend,
+            )
+            with session:
+                return fn(*args, **kwargs)
 
-                session = Session(
-                    agent_name=name,
-                    agent_version=agent_version,
-                    tags=tags,
-                    user_metadata=user_metadata,
-                    redact=redact,
-                    auto_upload=auto_upload,
-                    storage_backend=storage_backend,
-                )
-                with session:
-                    return fn(*args, **kwargs)
-
-            return sync_wrapper  # type: ignore[return-value]
+        return sync_wrapper  # type: ignore[return-value]
 
     return decorator

@@ -1,0 +1,11 @@
+# Gitleaks configuration — allowlist for test/script files that contain
+# intentional placeholder credentials used only in local E2E test scripts.
+
+title = "Capsule gitleaks config"
+
+[allowlist]
+description = "E2E test scripts with intentional placeholder credentials"
+paths = [
+    "scripts/test_failed_upload.py",
+    "scripts/playwright_session_detail.py",
+]

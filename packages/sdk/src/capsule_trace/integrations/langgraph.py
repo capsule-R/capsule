@@ -1,4 +1,4 @@
-﻿"""LangGraph integration — hooks into StateGraph to capture node executions.
+"""LangGraph integration — hooks into StateGraph to capture node executions.
 
 Usage::
 
@@ -19,6 +19,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from typing import Any
@@ -40,7 +41,11 @@ def add_capsule_tracing(graph: Any) -> Any:
         # LangGraph stores nodes in _nodes dict
         nodes = getattr(graph, "_nodes", {})
         for node_name, node_spec in list(nodes.items()):
-            original_fn = node_spec.get("runnable") if isinstance(node_spec, dict) else getattr(node_spec, "runnable", None)
+            original_fn = (
+                node_spec.get("runnable")
+                if isinstance(node_spec, dict)
+                else getattr(node_spec, "runnable", None)
+            )
             if original_fn is None:
                 continue
             nodes[node_name] = _wrap_node(node_name, original_fn, node_spec)
@@ -62,7 +67,7 @@ def _wrap_node(name: str, fn: Any, spec: Any) -> Any:
         error = None
         try:
             result = fn(state, *args, **kwargs)
-            return result
+            return result  # noqa: RET504
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             raise
@@ -77,10 +82,8 @@ def _wrap_node(name: str, fn: Any, spec: Any) -> Any:
         return new_spec
 
     # If spec is an object, try to replace the runnable attribute
-    try:
+    with contextlib.suppress(AttributeError):
         spec.runnable = wrapped
-    except AttributeError:
-        pass
     return spec
 
 

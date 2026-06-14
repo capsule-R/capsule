@@ -1,4 +1,4 @@
-﻿"""Upload a local session to the Capsule Cloud API."""
+"""Upload a local session to the Capsule Cloud API."""
 
 from __future__ import annotations
 
@@ -59,13 +59,11 @@ def upload_session(
     config = _get_cloud_config()
     if not config["api_key"]:
         raise RuntimeError(
-            "CAPSULE_API_KEY is not set. "
-            "Run `capsule cloud login` or set the env var."
+            "CAPSULE_API_KEY is not set. Run `capsule cloud login` or set the env var."
         )
     if not config["workspace_id"]:
         raise RuntimeError(
-            "CAPSULE_WORKSPACE_ID is not set. "
-            "Set it via env var or `capsule cloud login`."
+            "CAPSULE_WORKSPACE_ID is not set. Set it via env var or `capsule cloud login`."
         )
 
     # Export to a temp .capsule file
@@ -102,7 +100,6 @@ def upload_session(
         result: dict[str, Any] = resp.json()
         logger.info(
             "capsule.cloud.uploaded",
-            session_id=session_id,
-            response_id=result.get("id"),
+            extra={"session_id": session_id, "response_id": result.get("id")},
         )
         return result

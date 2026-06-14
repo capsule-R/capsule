@@ -1,4 +1,4 @@
-﻿"""Unit tests for the LangChain callback handler."""
+"""Unit tests for the LangChain callback handler."""
 
 from __future__ import annotations
 
@@ -58,7 +58,9 @@ def test_callback_handler_captures_tool_call(backend):
     with Session(agent_name="langchain-tool-test", storage_backend=backend) as s:
         sid = s.session_id
         handler.on_tool_start({}, "get_balance", run_id=run_id)
-        handler.on_tool_end('{"balance": 1500}', run_id=run_id, name="get_balance", input="cust_001")
+        handler.on_tool_end(
+            '{"balance": 1500}', run_id=run_id, name="get_balance", input="cust_001"
+        )
 
     events = backend.read_events(sid)
     assert len(events) == 1

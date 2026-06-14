@@ -1,4 +1,4 @@
-﻿"""Google Generative AI integration — patches generate_content (sync + async)."""
+"""Google Generative AI integration — patches generate_content (sync + async)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from capsule_trace.core.models import (
     LLMMessage,
     LLMParameters,
     LLMResponse,
-    LLMUsage,
 )
 
 logger = logging.getLogger("capsule.integrations.google")
@@ -29,7 +28,7 @@ def patch() -> None:
         return
 
     try:
-        import google.generativeai as genai  # type: ignore[import-untyped]
+        import google.generativeai as genai
     except ImportError:
         return
 

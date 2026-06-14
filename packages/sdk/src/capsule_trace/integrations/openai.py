@@ -30,7 +30,7 @@ def patch() -> None:
         return
 
     try:
-        import openai  # type: ignore[import-untyped]
+        import openai
     except ImportError:
         return
 
@@ -68,6 +68,7 @@ class _CapsuleSyncDescriptor:
         @functools.wraps(self._original)
         def wrapper(**kwargs: Any) -> Any:
             from capsule_trace.replay.mode import get_replay_store
+
             store = get_replay_store()
             if store is not None:
                 return _cassette_response_openai(store, kwargs)
@@ -121,6 +122,7 @@ class _CapsuleAsyncDescriptor:
         @functools.wraps(self._original)
         async def wrapper(**kwargs: Any) -> Any:
             from capsule_trace.replay.mode import get_replay_store
+
             store = get_replay_store()
             if store is not None:
                 return _cassette_response_openai(store, kwargs)
@@ -193,9 +195,7 @@ def _build_request_payload(kwargs: dict[str, Any], provider: str) -> LLMCallPayl
     )
 
 
-def _complete_payload(
-    payload: LLMCallPayload, response: Any, duration_ms: float
-) -> LLMCallPayload:
+def _complete_payload(payload: LLMCallPayload, response: Any, duration_ms: float) -> LLMCallPayload:
     try:
         choice = response.choices[0] if response.choices else None
         usage = response.usage

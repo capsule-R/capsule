@@ -1,10 +1,10 @@
-﻿"""Unit tests for tool call capture."""
+"""Unit tests for tool call capture."""
 
 from __future__ import annotations
 
 import pytest
 
-from capsule_trace.core.models import EventType, SessionStatus
+from capsule_trace.core.models import EventType
 from capsule_trace.core.session import Session
 from capsule_trace.integrations.tools import capture_tool_call
 from capsule_trace.storage.sqlite import SQLiteBackend
@@ -38,10 +38,12 @@ def test_capture_tool_call_captures_error(backend):
     def failing_tool() -> None:
         raise ValueError("tool exploded")
 
-    with pytest.raises(ValueError):
-        with Session(agent_name="error-tool-test", storage_backend=backend) as s:
-            sid = s.session_id
-            failing_tool()
+    with (
+        pytest.raises(ValueError),
+        Session(agent_name="error-tool-test", storage_backend=backend) as s,
+    ):
+        sid = s.session_id
+        failing_tool()
 
     events = backend.read_events(sid)
     assert len(events) == 1
@@ -53,6 +55,7 @@ def test_capture_tool_call_captures_error(backend):
 
 def test_capture_tool_call_no_session():
     """When no session is active, the tool runs normally with zero side effects."""
+
     @capture_tool_call(tool_name="passthrough")
     def passthrough(x: int) -> int:
         return x * 2

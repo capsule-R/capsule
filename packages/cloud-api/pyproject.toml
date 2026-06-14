@@ -35,3 +35,34 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "capsule_cloud.auth",
+    "capsule_cloud.config",
+    "capsule_cloud.database",
+    "capsule_cloud.replay_worker",
+    "capsule_cloud.schemas",
+    "capsule_cloud.storage",
+    "capsule_cloud.routers.api_keys",
+    "capsule_cloud.routers.auth",
+    "capsule_cloud.routers.branches",
+    "capsule_cloud.routers.replays",
+    "capsule_cloud.routers.sessions",
+    "capsule_cloud.routers.workspaces",
+]
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "call-overload",
+    "no-any-return",
+    "no-untyped-call",
+    "no-untyped-def",
+    "type-arg",
+    "unused-ignore",
+]

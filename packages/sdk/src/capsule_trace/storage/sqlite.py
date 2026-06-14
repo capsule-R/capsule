@@ -1,4 +1,4 @@
-﻿"""SQLite storage backend — default local store at ~/.capsule/sessions.db."""
+"""SQLite storage backend — default local store at ~/.capsule/sessions.db."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
-    JSON,
     Column,
     Float,
     Integer,
@@ -16,7 +15,7 @@ from sqlalchemy import (
     Text,
     create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Session as OrmSession, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from capsule_trace.core.models import Event, EventType, SessionMetadata, SessionStatus
 
@@ -92,7 +91,7 @@ class SQLiteBackend:
         self._Session = sessionmaker(bind=self._engine)
 
     @classmethod
-    def default(cls) -> "SQLiteBackend":
+    def default(cls) -> SQLiteBackend:
         default_path = Path.home() / ".capsule" / "sessions.db"
         return cls(default_path)
 
@@ -120,11 +119,7 @@ class SQLiteBackend:
     def write_cassette(self, cassette_id: str, data: dict[str, Any]) -> None:
         with self._Session() as db:
             session_id = data.get("session_id", "")
-            existing = (
-                db.query(_CassetteRow)
-                .filter_by(cassette_id=cassette_id)
-                .first()
-            )
+            existing = db.query(_CassetteRow).filter_by(cassette_id=cassette_id).first()
             if existing is None:
                 row = _CassetteRow(
                     cassette_id=cassette_id,
@@ -149,14 +144,8 @@ class SQLiteBackend:
 
     def finalize_session(self, metadata: SessionMetadata) -> None:
         with self._Session() as db:
-            existing = (
-                db.query(_SessionRow)
-                .filter_by(session_id=metadata.session_id)
-                .first()
-            )
-            error_json = (
-                json.dumps(metadata.error.model_dump()) if metadata.error else None
-            )
+            existing = db.query(_SessionRow).filter_by(session_id=metadata.session_id).first()
+            error_json = json.dumps(metadata.error.model_dump()) if metadata.error else None
             if existing is None:
                 row = _SessionRow(
                     session_id=metadata.session_id,
@@ -204,10 +193,8 @@ class SQLiteBackend:
 
     def read_cassettes(self, session_id: str) -> dict[str, Any]:
         with self._Session() as db:
-            rows = (
-                db.query(_CassetteRow).filter_by(session_id=session_id).all()
-            )
-            return {r.cassette_id: json.loads(r.data_json) for r in rows}  # type: ignore[union-attr]
+            rows = db.query(_CassetteRow).filter_by(session_id=session_id).all()
+            return {r.cassette_id: json.loads(r.data_json) for r in rows}  # type: ignore[misc, arg-type]
 
     def read_snapshots(self, session_id: str) -> dict[int, Any]:
         with self._Session() as db:
@@ -217,16 +204,11 @@ class SQLiteBackend:
                 .order_by(_SnapshotRow.step_index)
                 .all()
             )
-            return {r.step_index: json.loads(r.data_json) for r in rows}  # type: ignore[union-attr]
+            return {r.step_index: json.loads(r.data_json) for r in rows}  # type: ignore[misc, arg-type]
 
     def list_sessions(self, limit: int = 50) -> list[SessionMetadata]:
         with self._Session() as db:
-            rows = (
-                db.query(_SessionRow)
-                .order_by(_SessionRow.started_at.desc())
-                .limit(limit)
-                .all()
-            )
+            rows = db.query(_SessionRow).order_by(_SessionRow.started_at.desc()).limit(limit).all()
             return [self._row_to_metadata(r) for r in rows]
 
     def delete_session(self, session_id: str) -> None:
@@ -243,10 +225,10 @@ class SQLiteBackend:
         from datetime import datetime
 
         error = None
-        if row.error_json:  # type: ignore[truthy-bool]
+        if row.error_json:
             from capsule_trace.core.models import SessionError
 
-            error = SessionError(**json.loads(row.error_json))  # type: ignore[arg-type]
+            error = SessionError(**json.loads(str(row.error_json)))
 
         return SessionMetadata(
             session_id=str(row.session_id),
@@ -259,8 +241,8 @@ class SQLiteBackend:
             error=error,
             tags=json.loads(str(row.tags_json) or "[]"),
             user_metadata=json.loads(str(row.user_metadata_json) or "{}"),
-            step_count=int(row.step_count or 0),  # type: ignore[arg-type]
-            total_cost_usd=float(row.total_cost_usd or 0),  # type: ignore[arg-type]
+            step_count=int(row.step_count or 0),
+            total_cost_usd=float(row.total_cost_usd or 0),
         )
 
     def _row_to_event(self, row: _EventRow) -> Event:
@@ -270,10 +252,10 @@ class SQLiteBackend:
         return Event(
             event_id=str(row.event_id),
             session_id=str(row.session_id),
-            step_index=int(row.step_index),  # type: ignore[arg-type]
+            step_index=int(row.step_index),
             parent_event_id=str(row.parent_event_id) if row.parent_event_id else None,
             event_type=EventType(str(row.event_type)),
             timestamp=datetime.fromisoformat(str(row.timestamp)),
-            duration_ms=float(row.duration_ms or 0),  # type: ignore[arg-type]
+            duration_ms=float(row.duration_ms or 0),
             payload=payload,
         )

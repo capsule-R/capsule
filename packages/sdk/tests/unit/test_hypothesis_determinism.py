@@ -1,4 +1,4 @@
-﻿"""Hypothesis property-based tests — prove replay determinism across random sessions."""
+"""Hypothesis property-based tests — prove replay determinism across random sessions."""
 
 from __future__ import annotations
 
@@ -7,13 +7,11 @@ import json
 import tarfile
 from typing import Any
 
-import pytest
 import zstandard as zstd
-from hypothesis import given, settings, HealthCheck
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from capsule_trace.replay.engine import Replayer
-
 
 # ──────────────────────────────────────────────────────────────
 # Strategy: generate random capsule archives
@@ -55,6 +53,7 @@ def _build_capsule(session_id: str, events_data: list[dict[str, Any]]) -> bytes:
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
+
         def add(name: str, data: dict) -> None:
             blob = json.dumps(data, default=str).encode()
             info = tarfile.TarInfo(name=name)
@@ -69,7 +68,7 @@ def _build_capsule(session_id: str, events_data: list[dict[str, Any]]) -> bytes:
             ev["event_id"] = f"evt_{i:04d}"
             ev["timestamp"] = "2026-05-27T10:00:01+00:00"
             ev["duration_ms"] = 10.0
-            add(f"events/{i+1:04d}-{ev['event_type']}.json", ev)
+            add(f"events/{i + 1:04d}-{ev['event_type']}.json", ev)
 
     cctx = zstd.ZstdCompressor(level=3)
     return cctx.compress(buf.getvalue())
@@ -92,13 +91,16 @@ def random_event(draw: Any) -> dict[str, Any]:
 def random_capsule_bytes(draw: Any) -> bytes:
     n = draw(st.integers(min_value=0, max_value=20))
     events = draw(st.lists(random_event(), min_size=n, max_size=n))
-    session_id = draw(st.text(alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", min_size=10, max_size=26))
+    session_id = draw(
+        st.text(alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", min_size=10, max_size=26)
+    )
     return _build_capsule(session_id, events)
 
 
 # ──────────────────────────────────────────────────────────────
 # Property: replay is idempotent
 # ──────────────────────────────────────────────────────────────
+
 
 @given(data=random_capsule_bytes())
 @settings(
@@ -135,6 +137,7 @@ def test_branch_pre_events_count(data: bytes) -> None:
     if replayer.step_count == 0:
         return
     import random as _random
+
     step = _random.randint(0, replayer.step_count)
     branch = replayer.branch_from_step(step)
     assert len(branch.pre_branch_events) == step

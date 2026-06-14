@@ -1,4 +1,4 @@
-﻿"""Tool / function-call capture helpers.
+"""Tool / function-call capture helpers.
 
 Provides `capture_tool_call` — a decorator and context manager that wraps
 any Python function and records its invocation as a ToolCall event in the
@@ -15,9 +15,9 @@ from __future__ import annotations
 import functools
 import logging
 import time
-import traceback
 import uuid
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from capsule_trace.core.context import get_current_session
 from capsule_trace.core.models import Event, EventType, ToolCallPayload
@@ -52,6 +52,7 @@ def capture_tool_call(
 
             # Build argument dict from positional + keyword args
             import inspect
+
             try:
                 sig = inspect.signature(fn)
                 bound = sig.bind(*args, **kwargs)
@@ -65,7 +66,7 @@ def capture_tool_call(
             error: str | None = None
             try:
                 result = fn(*args, **kwargs)
-                return result
+                return result  # noqa: RET504
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
                 raise
@@ -122,6 +123,7 @@ def _emit_tool_event(
 
 
 # ── OpenAI function-calling interception ─────────────────────
+
 
 def intercept_openai_tool_calls(response: Any, session: Any) -> None:
     """After an OpenAI response with tool_calls, capture each as a ToolCall event.

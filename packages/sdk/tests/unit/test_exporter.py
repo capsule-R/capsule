@@ -1,11 +1,10 @@
-﻿"""Unit tests for .capsule file export and import roundtrip."""
+"""Unit tests for .capsule file export and import roundtrip."""
 
 from __future__ import annotations
 
+import io
 import json
 import tarfile
-import io
-from pathlib import Path
 
 import pytest
 import zstandard as zstd
@@ -103,13 +102,9 @@ def test_export_manifest_has_integrity_hashes(tmp_path, backend_with_session):
 
 def test_import_roundtrip(tmp_path, backend_with_session):
     from capsule_trace.core.exporter import export_capsule
-    from capsule_trace.core.importer import import_capsule_file
 
     output = tmp_path / "roundtrip.capsule"
     export_capsule("ses_test001", backend_with_session, output)
-
-    import_backend = SQLiteBackend(tmp_path / "import.db")
-    session_id = import_capsule_file.__wrapped__(output) if hasattr(import_capsule_file, "__wrapped__") else None
 
     # Simpler: just verify the file can be decompressed and contains expected structure
     raw = output.read_bytes()
@@ -122,3 +117,28 @@ def test_import_roundtrip(tmp_path, backend_with_session):
 
     assert session_data["session_id"] == "ses_test001"
     assert session_data["agent_name"] == "test-agent"
+
+
+def test_import_capsule_file(tmp_path, backend_with_session, monkeypatch):
+    """Full export→import round-trip through import_capsule_file."""
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.core.importer import import_capsule_file
+
+    output = tmp_path / "roundtrip.capsule"
+    export_capsule("ses_test001", backend_with_session, output)
+
+    import_backend = SQLiteBackend(tmp_path / "import.db")
+    monkeypatch.setattr(
+        "capsule_trace.storage.sqlite.SQLiteBackend.default",
+        classmethod(lambda cls: import_backend),
+    )
+
+    session_id = import_capsule_file(output)
+    assert session_id == "ses_test001"
+
+    meta = import_backend.read_session_metadata(session_id)
+    assert meta.agent_name == "test-agent"
+    assert meta.status.value == "failed"
+
+    events = import_backend.read_events(session_id)
+    assert len(events) == 2
