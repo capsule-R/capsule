@@ -1,4 +1,4 @@
-﻿"""Pure-Python replay engine.
+"""Pure-Python replay engine.
 
 Loads a .capsule archive and replays it deterministically by serving
 stored cassette responses instead of hitting live LLM providers.
@@ -24,13 +24,14 @@ that context and a new Session picks up from there.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import io
 import json
 import logging
 import tarfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,6 @@ import zstandard as zstd
 
 from capsule_trace.core.models import Event, EventType, SessionMetadata
 from capsule_trace.replay.cassette import CassetteStore
-from capsule_trace.replay.mode import set_replay_store
 
 logger = logging.getLogger("capsule.replay")
 
@@ -86,7 +86,7 @@ class _Archive:
     snapshots: dict[int, Any]
 
     @staticmethod
-    def from_bytes(data: bytes) -> "_Archive":
+    def from_bytes(data: bytes) -> _Archive:
         dctx = zstd.ZstdDecompressor()
         tar_bytes = dctx.decompress(data)
 
@@ -132,13 +132,9 @@ class _Archive:
         snapshots: dict[int, Any] = {}
         for name, blob in files.items():
             if name.startswith("snapshots/"):
-                step_str = (
-                    name.removeprefix("snapshots/step-").removesuffix(".json")
-                )
-                try:
+                step_str = name.removeprefix("snapshots/step-").removesuffix(".json")
+                with contextlib.suppress(ValueError):
                     snapshots[int(step_str)] = json.loads(blob)
-                except ValueError:
-                    pass
 
         return _Archive(
             manifest=manifest,
@@ -149,7 +145,7 @@ class _Archive:
         )
 
     @staticmethod
-    def from_file(path: Path) -> "_Archive":
+    def from_file(path: Path) -> _Archive:
         return _Archive.from_bytes(path.read_bytes())
 
     def verify_integrity(self) -> bool:
@@ -158,17 +154,13 @@ class _Archive:
         if not expected:
             return True  # No hash stored — skip check
 
-        names = sorted(
-            f"events/{i+1:04d}-{e.event_type.value}.json"
-            for i, e in enumerate(self.events)
-        )
         # Reserialise events to bytes in the same order they were written
         h = hashlib.sha256()
         for event in self.events:
             blob = json.dumps(event.model_dump_json_safe(), indent=2, default=str).encode()
             h.update(blob)
 
-        return h.hexdigest() == expected
+        return bool(h.hexdigest() == expected)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -186,19 +178,20 @@ class Replayer:
     # ── Constructors ─────────────────────────────────────────
 
     @classmethod
-    def from_file(cls, path: Path | str) -> "Replayer":
+    def from_file(cls, path: Path | str) -> Replayer:
         return cls(_Archive.from_file(Path(path)))
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "Replayer":
+    def from_bytes(cls, data: bytes) -> Replayer:
         return cls(_Archive.from_bytes(data))
 
     @classmethod
-    def from_session_id(cls, session_id: str) -> "Replayer":
+    def from_session_id(cls, session_id: str) -> Replayer:
         """Load from the local SQLite store → export → load."""
+        import tempfile
+
         from capsule_trace.core.exporter import export_capsule
         from capsule_trace.storage.sqlite import SQLiteBackend
-        import tempfile
 
         backend = SQLiteBackend.default()
         with tempfile.NamedTemporaryFile(suffix=".capsule", delete=False) as tmp:
@@ -261,13 +254,10 @@ class Replayer:
             # then at step 7 it hits live APIs with the modified params.
         """
         if step < 0 or step > self.step_count:
-            raise IndexError(
-                f"step {step} out of range for session with {self.step_count} steps"
-            )
+            raise IndexError(f"step {step} out of range for session with {self.step_count} steps")
 
         pre_branch = [
-            self._replay_event(e, modifications=None)
-            for e in self._archive.events[:step]
+            self._replay_event(e, modifications=None) for e in self._archive.events[:step]
         ]
 
         return BranchResult(
@@ -278,7 +268,7 @@ class Replayer:
             cassette_store=self._store,
         )
 
-    def diff(self, other: "Replayer") -> dict[str, Any]:
+    def diff(self, other: Replayer) -> dict[str, Any]:
         """Compare this session's events with another session's events."""
         a_events = self._archive.events
         b_events = other._archive.events
@@ -318,9 +308,7 @@ class Replayer:
 
     # ── Internal ─────────────────────────────────────────────
 
-    def _replay_event(
-        self, event: Event, modifications: dict[str, Any] | None
-    ) -> Event:
+    def _replay_event(self, event: Event, modifications: dict[str, Any] | None) -> Event:
         """Return a copy of the event, injecting cassette response for LLM/tool calls."""
         payload = (
             copy.deepcopy(event.payload)

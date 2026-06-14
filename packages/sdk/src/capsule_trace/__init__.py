@@ -1,4 +1,4 @@
-﻿"""Capsule — Deterministic replay & time-travel debugger for AI agents."""
+"""Capsule — Deterministic replay & time-travel debugger for AI agents."""
 
 from __future__ import annotations
 
@@ -10,12 +10,14 @@ from capsule_trace.core.session import Session, get_current_session
 # Auto-activate integrations if the provider is installed
 try:
     from capsule_trace.integrations.openai import patch as _patch_openai
+
     _patch_openai()
 except ImportError:
     pass
 
 try:
     from capsule_trace.integrations.anthropic import patch as _patch_anthropic
+
     _patch_anthropic()
 except ImportError:
     pass

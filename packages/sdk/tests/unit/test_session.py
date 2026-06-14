@@ -1,4 +1,4 @@
-﻿"""Unit tests for Session and @trace decorator."""
+"""Unit tests for Session and @trace decorator."""
 
 from __future__ import annotations
 
@@ -33,10 +33,12 @@ def test_session_success(in_memory_backend):
 
 def test_session_captures_exception(in_memory_backend):
     session_id = None
-    with pytest.raises(ValueError):
-        with Session(agent_name="failing-agent", storage_backend=in_memory_backend) as s:
-            session_id = s.session_id
-            raise ValueError("something went wrong")
+    with (
+        pytest.raises(ValueError),
+        Session(agent_name="failing-agent", storage_backend=in_memory_backend) as s,
+    ):
+        session_id = s.session_id
+        raise ValueError("something went wrong")
 
     assert session_id is not None
     meta = in_memory_backend.read_session_metadata(session_id)
@@ -146,7 +148,7 @@ def test_trace_preserves_return_value_on_exception(in_memory_backend):
 
 
 def test_capture_event_increments_step_count(in_memory_backend):
-    from capsule_trace.core.models import Event, EventType
+    from capsule_trace.core.models import Event
 
     with Session(agent_name="event-test", storage_backend=in_memory_backend) as s:
         session_id = s.session_id

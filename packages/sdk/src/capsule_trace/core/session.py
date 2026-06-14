@@ -1,25 +1,22 @@
-﻿"""Session — represents a single agent execution being captured."""
+"""Session — represents a single agent execution being captured."""
 
 from __future__ import annotations
 
 import logging
-import os
-import platform
-import sys
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import ulid  # type: ignore[import-untyped]
+import ulid
 
-from capsule_trace.core.context import get_current_session, set_current_session
+from capsule_trace.core.context import get_current_session as get_current_session
+from capsule_trace.core.context import set_current_session
 from capsule_trace.core.models import (
     Event,
     SessionError,
     SessionMetadata,
     SessionStatus,
-    TokenUsage,
 )
 
 logger = logging.getLogger("capsule")
@@ -57,7 +54,7 @@ class Session:
 
     # ── Context manager ───────────────────────────────────────
 
-    def __enter__(self) -> "Session":
+    def __enter__(self) -> Session:
         self._previous_session = get_current_session()
         set_current_session(self)
         return self
@@ -74,7 +71,7 @@ class Session:
 
     # ── Async context manager ─────────────────────────────────
 
-    async def __aenter__(self) -> "Session":
+    async def __aenter__(self) -> Session:
         return self.__enter__()
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -104,12 +101,10 @@ class Session:
     ) -> None:
         """Mark the session as complete and persist final metadata."""
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             self._metadata.ended_at = now
             self._metadata.status = status
-            self._metadata.duration_ms = (
-                (now - self._metadata.started_at).total_seconds() * 1000
-            )
+            self._metadata.duration_ms = (now - self._metadata.started_at).total_seconds() * 1000
 
             if error is not None:
                 self._metadata.error = SessionError(
@@ -145,7 +140,7 @@ class Session:
     # ── Properties ────────────────────────────────────────────
 
     @property
-    def session_id(self) -> str:  # type: ignore[override]
+    def session_id(self) -> str:
         return self._session_id
 
     @session_id.setter

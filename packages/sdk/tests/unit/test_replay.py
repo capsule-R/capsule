@@ -1,24 +1,23 @@
-﻿"""Unit tests for the Capsule replay engine."""
+"""Unit tests for the Capsule replay engine."""
 
 from __future__ import annotations
 
 import io
 import json
 import tarfile
-from pathlib import Path
 
 import pytest
 import zstandard as zstd
 
-from capsule_trace.core.models import Event, EventType, SessionMetadata, SessionStatus
+from capsule_trace.core.models import EventType
 from capsule_trace.replay.cassette import CassetteStore
-from capsule_trace.replay.engine import Replayer, ReplayResult
+from capsule_trace.replay.engine import Replayer
 from capsule_trace.storage.sqlite import SQLiteBackend
-
 
 # ──────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────
+
 
 def _make_capsule_bytes(
     session_id: str = "ses_test",
@@ -42,26 +41,26 @@ def _make_capsule_bytes(
     for i in range(n_events):
         cass_id = f"llm-{i:04d}"
         cass_ref = f"cassettes/{cass_id}.json"
-        events.append({
-            "event_id": f"evt_{i:03d}",
-            "session_id": session_id,
-            "step_index": i,
-            "event_type": "llm_call",
-            "timestamp": "2026-05-27T10:00:01+00:00",
-            "duration_ms": 100.0,
-            "payload": {
-                "provider": "openai",
-                "model": "gpt-4o",
-                "messages": [{"role": "user", "content": f"step {i}"}],
-                "cassette_ref": cass_ref,
-            },
-        })
+        events.append(
+            {
+                "event_id": f"evt_{i:03d}",
+                "session_id": session_id,
+                "step_index": i,
+                "event_type": "llm_call",
+                "timestamp": "2026-05-27T10:00:01+00:00",
+                "duration_ms": 100.0,
+                "payload": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "messages": [{"role": "user", "content": f"step {i}"}],
+                    "cassette_ref": cass_ref,
+                },
+            }
+        )
         if include_cassettes:
             cassettes[cass_id] = {
                 "raw_response": {
-                    "choices": [
-                        {"message": {"content": f"response {i}"}, "finish_reason": "stop"}
-                    ],
+                    "choices": [{"message": {"content": f"response {i}"}, "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
                 }
             }
@@ -89,6 +88,7 @@ def _make_capsule_bytes(
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
+
         def add(name: str, data: dict) -> None:
             blob = json.dumps(data).encode()
             info = tarfile.TarInfo(name=name)
@@ -98,7 +98,7 @@ def _make_capsule_bytes(
         add("manifest.json", manifest)
         add("session.json", session)
         for i, ev in enumerate(events):
-            add(f"events/{i+1:04d}-llm_call.json", ev)
+            add(f"events/{i + 1:04d}-llm_call.json", ev)
         for cid, cdata in cassettes.items():
             add(f"cassettes/{cid}.json", cdata)
 
@@ -109,6 +109,7 @@ def _make_capsule_bytes(
 # ──────────────────────────────────────────────────────────────
 # CassetteStore
 # ──────────────────────────────────────────────────────────────
+
 
 def test_cassette_store_lookup_by_ref():
     store = CassetteStore({"llm-0001": {"data": "foo"}})
@@ -137,6 +138,7 @@ def test_cassette_store_reset():
 # Replayer — loading
 # ──────────────────────────────────────────────────────────────
 
+
 def test_replayer_from_bytes():
     data = _make_capsule_bytes("ses_abc", n_events=2)
     r = Replayer.from_bytes(data)
@@ -164,19 +166,21 @@ def test_replayer_unsupported_version():
     manifest["capsule_version"] = "9.0"
 
     buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w") as new_tar:
+    with (
+        tarfile.open(fileobj=buf, mode="w") as new_tar,
+        tarfile.open(fileobj=io.BytesIO(tar_bytes)) as old_tar,
+    ):
         # Re-pack with bad version
-        with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as old_tar:
-            for member in old_tar.getmembers():
-                if member.name == "manifest.json":
-                    blob = json.dumps(manifest).encode()
-                    info = tarfile.TarInfo(name="manifest.json")
-                    info.size = len(blob)
-                    new_tar.addfile(info, io.BytesIO(blob))
-                else:
-                    f2 = old_tar.extractfile(member)
-                    if f2:
-                        new_tar.addfile(member, f2)
+        for member in old_tar.getmembers():
+            if member.name == "manifest.json":
+                blob = json.dumps(manifest).encode()
+                info = tarfile.TarInfo(name="manifest.json")
+                info.size = len(blob)
+                new_tar.addfile(info, io.BytesIO(blob))
+            else:
+                f2 = old_tar.extractfile(member)
+                if f2:
+                    new_tar.addfile(member, f2)
 
     cctx = zstd.ZstdCompressor(level=3)
     bad_data = cctx.compress(buf.getvalue())
@@ -187,6 +191,7 @@ def test_replayer_unsupported_version():
 # ──────────────────────────────────────────────────────────────
 # Replayer — replay()
 # ──────────────────────────────────────────────────────────────
+
 
 def test_replay_returns_all_events():
     data = _make_capsule_bytes(n_events=5)
@@ -225,6 +230,7 @@ def test_replay_result_is_deterministic_flag():
 # Replayer — branch_from_step()
 # ──────────────────────────────────────────────────────────────
 
+
 def test_branch_from_step_zero():
     data = _make_capsule_bytes(n_events=5)
     branch = Replayer.from_bytes(data).branch_from_step(0)
@@ -262,6 +268,7 @@ def test_branch_carries_modifications():
 # Replayer — diff()
 # ──────────────────────────────────────────────────────────────
 
+
 def test_diff_identical_sessions():
     data = _make_capsule_bytes("ses_a", n_events=3)
     a = Replayer.from_bytes(data)
@@ -284,26 +291,17 @@ def test_diff_different_step_counts():
 # Replayer — from_session_id (round-trip through SQLite)
 # ──────────────────────────────────────────────────────────────
 
-def test_replayer_from_session_id(tmp_path, monkeypatch):
-    """Verify we can export from SQLite and reload via Replayer.from_session_id."""
+
+def test_replayer_from_session_id(tmp_path):
+    """Verify we can export from SQLite and reload via Replayer.from_file."""
     from capsule_trace.core.session import Session
 
     backend = SQLiteBackend(tmp_path / "test.db")
 
-    # Monkeypatch SQLiteBackend.default() to return our tmp backend
-    monkeypatch.setattr(
-        "capsule.storage.sqlite.SQLiteBackend.default",
-        classmethod(lambda cls: backend),
-    )
-    monkeypatch.setattr(
-        "capsule.core.exporter.SQLiteBackend" if False else
-        "capsule.storage.sqlite.SQLiteBackend.default",
-        classmethod(lambda cls: backend),
-    )
-
     with Session(agent_name="roundtrip", storage_backend=backend) as s:
         sid = s.session_id
         from capsule_trace.core.models import Event, LLMCallPayload, LLMMessage
+
         ev = Event(
             session_id=sid,
             step_index=0,
@@ -318,6 +316,7 @@ def test_replayer_from_session_id(tmp_path, monkeypatch):
         s.capture_event(ev)
 
     from capsule_trace.core.exporter import export_capsule
+
     out = tmp_path / "test.capsule"
     export_capsule(sid, backend, out)
 

@@ -1,10 +1,12 @@
-﻿"""Capsule CLI — entry point for all `capsule` commands."""
+"""Capsule CLI — entry point for all `capsule` commands."""
 
 from __future__ import annotations
 
 import json
 import sys
+from datetime import UTC
 from pathlib import Path
+from typing import Any, cast
 
 import click
 from rich.console import Console
@@ -16,15 +18,15 @@ console = Console()
 # ── config helpers ────────────────────────────────────────────
 
 
-def load_config() -> dict | None:
+def load_config() -> dict[str, Any] | None:
     config_path = Path.home() / ".capsule" / "config.json"
     if not config_path.exists():
         return None
     with open(config_path) as f:
-        return json.load(f)
+        return cast("dict[str, Any]", json.load(f))
 
 
-def save_config(data: dict) -> None:
+def save_config(data: dict[str, Any]) -> None:
     config_dir = Path.home() / ".capsule"
     config_dir.mkdir(exist_ok=True)
     with open(config_dir / "config.json", "w") as f:
@@ -126,7 +128,9 @@ def show_session(session_id: str, as_json: bool) -> None:
 
     console.print(f"\n[bold]Events[/bold] ({len(events)})")
     for event in events:
-        console.print(f"  [{event.step_index:03d}] {event.event_type.value} — {event.duration_ms:.1f}ms")
+        console.print(
+            f"  [{event.step_index:03d}] {event.event_type.value} — {event.duration_ms:.1f}ms"
+        )
 
 
 # ── capsule export ────────────────────────────────────────────
@@ -185,8 +189,9 @@ def import_capsule(capsule_file: str) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Output result as JSON")
 def replay_session(session_id_or_file: str, mode: str, as_json: bool) -> None:
     """Replay a captured session deterministically from cassettes."""
-    from capsule_trace.replay.engine import Replayer
     from pathlib import Path
+
+    from capsule_trace.replay.engine import Replayer
 
     try:
         p = Path(session_id_or_file)
@@ -206,22 +211,31 @@ def replay_session(session_id_or_file: str, mode: str, as_json: bool) -> None:
     result = replayer.replay()
 
     if as_json:
-        click.echo(json.dumps({
-            "session_id": result.session_id,
-            "replayed_steps": result.replayed_step_count,
-            "original_steps": result.original_step_count,
-            "is_deterministic": result.is_deterministic,
-            "integrity_ok": result.integrity_ok,
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "session_id": result.session_id,
+                    "replayed_steps": result.replayed_step_count,
+                    "original_steps": result.original_step_count,
+                    "is_deterministic": result.is_deterministic,
+                    "integrity_ok": result.integrity_ok,
+                },
+                indent=2,
+            )
+        )
         return
 
-    status = "[green]deterministic[/green]" if result.is_deterministic else "[yellow]mismatch[/yellow]"
+    status = (
+        "[green]deterministic[/green]" if result.is_deterministic else "[yellow]mismatch[/yellow]"
+    )
     console.print(f"\nResult: {status}")
     console.print(f"  Steps replayed:  {result.replayed_step_count}/{result.original_step_count}")
     console.print(f"  Integrity check: {'✓' if result.integrity_ok else '✗'}")
 
     for e in result.events:
-        has_cassette = "[dim](cassette)[/dim]" if e.event_type.value in ("llm_call", "tool_call") else ""
+        has_cassette = (
+            "[dim](cassette)[/dim]" if e.event_type.value in ("llm_call", "tool_call") else ""
+        )
         console.print(f"  [{e.step_index:03d}] {e.event_type.value} {has_cassette}")
 
 
@@ -231,7 +245,9 @@ def replay_session(session_id_or_file: str, mode: str, as_json: bool) -> None:
 @main.command("branch")
 @click.argument("session_id")
 @click.option("--from-step", "-s", required=True, type=int, help="Step index to branch from")
-@click.option("--modify", "-m", multiple=True, help="key=value modifications (e.g. temperature=0.0)")
+@click.option(
+    "--modify", "-m", multiple=True, help="key=value modifications (e.g. temperature=0.0)"
+)
 def branch_session(session_id: str, from_step: int, modify: tuple[str, ...]) -> None:
     """Branch a session from a specific step with optional modifications."""
     modifications: dict[str, str] = {}
@@ -256,9 +272,7 @@ def branch_session(session_id: str, from_step: int, modify: tuple[str, ...]) -> 
         console.print(f"[red]{exc}[/red]")
         sys.exit(1)
 
-    console.print(
-        f"Branch context ready: [cyan]{session_id}[/cyan] @ step {from_step}"
-    )
+    console.print(f"Branch context ready: [cyan]{session_id}[/cyan] @ step {from_step}")
     console.print(f"  Pre-branch events: {len(branch.pre_branch_events)}")
     console.print(f"  Modifications:     {branch.modifications or '(none)'}")
     console.print(
@@ -287,8 +301,12 @@ def diff_sessions(session_id_1: str, session_id_2: str) -> None:
         console.print(f"[red]Session not found:[/red] {exc}")
         sys.exit(1)
 
-    console.print(f"\n[bold]Session A[/bold] [cyan]{session_id_1}[/cyan]: {m1.status.value}, {len(e1)} steps")
-    console.print(f"[bold]Session B[/bold] [cyan]{session_id_2}[/cyan]: {m2.status.value}, {len(e2)} steps")
+    console.print(
+        f"\n[bold]Session A[/bold] [cyan]{session_id_1}[/cyan]: {m1.status.value}, {len(e1)} steps"
+    )
+    console.print(
+        f"[bold]Session B[/bold] [cyan]{session_id_2}[/cyan]: {m2.status.value}, {len(e2)} steps"
+    )
     console.print(f"\nStep count diff: {len(e1)} vs {len(e2)} ({len(e2) - len(e1):+d})")
 
     min_len = min(len(e1), len(e2))
@@ -334,7 +352,7 @@ def delete_session(session_id: str, yes: bool) -> None:
 @click.option("--port", default=7842, show_default=True)
 def serve(port: int) -> None:
     """Start the local web UI."""
-    console.print(f"[yellow]Local web UI coming in Sprint 6 (cloud platform).[/yellow]")
+    console.print("[yellow]Local web UI coming in Sprint 6 (cloud platform).[/yellow]")
     console.print(f"Would start on http://localhost:{port}")
 
 
@@ -377,9 +395,7 @@ def upload_session_cmd(session_id: str, tags: str) -> None:
     # Resolve workspace ID
     auth_headers = {"Authorization": f"Capsule {api_key}"}
     try:
-        ws_resp = httpx.get(
-            f"{api_url}/api/v1/workspaces", headers=auth_headers, timeout=10
-        )
+        ws_resp = httpx.get(f"{api_url}/api/v1/workspaces", headers=auth_headers, timeout=10)
     except httpx.ConnectError:
         console.print(f"Could not reach {api_url}. Check your internet connection.")
         sys.exit(1)
@@ -434,12 +450,13 @@ def cloud_group() -> None:
 
 
 @cloud_group.command("login")
-@click.option("--url", default="https://api.capsule.dev", show_default=True,
-              help="Cloud API base URL")
-@click.option("--api-key", prompt="API key", hide_input=True,
-              help="Your Capsule Cloud API key (csk_…)")
-@click.option("--workspace", prompt="Workspace ID",
-              help="Your workspace ID")
+@click.option(
+    "--url", default="https://api.capsule.dev", show_default=True, help="Cloud API base URL"
+)
+@click.option(
+    "--api-key", prompt="API key", hide_input=True, help="Your Capsule Cloud API key (csk_…)"
+)
+@click.option("--workspace", prompt="Workspace ID", help="Your workspace ID")
 def cloud_login(url: str, api_key: str, workspace: str) -> None:
     """Save Capsule Cloud credentials to ~/.capsule/cloud.json."""
     import json as _json
@@ -481,22 +498,25 @@ def cloud_status() -> None:
 
 @main.command("login")
 @click.option(
-    "--api-key", prompt="API Key", hide_input=True,
+    "--api-key",
+    prompt="API Key",
+    hide_input=True,
     help="Your Capsule API key from Settings > API Keys",
 )
 @click.option(
-    "--api-url", default="https://YOUR_RAILWAY_URL",
+    "--api-url",
+    default="https://YOUR_RAILWAY_URL",
     help="Capsule API base URL",
 )
 def login(api_key: str, api_url: str) -> None:
     """Authenticate with the Capsule API."""
+    from datetime import datetime
+
     import httpx
-    from datetime import datetime, timezone
 
     if not (api_key.startswith("sk_live_") or api_key.startswith("sk_test_")):
         console.print(
-            "Invalid API key format. "
-            "Get your key from the dashboard under Settings → API Keys."
+            "Invalid API key format. Get your key from the dashboard under Settings → API Keys."
         )
         sys.exit(1)
 
@@ -507,10 +527,7 @@ def login(api_key: str, api_url: str) -> None:
             timeout=10,
         )
     except httpx.ConnectError:
-        console.print(
-            f"Could not reach {api_url}. "
-            "Check your internet connection or the API URL."
-        )
+        console.print(f"Could not reach {api_url}. Check your internet connection or the API URL.")
         sys.exit(1)
 
     if resp.status_code == 401:
@@ -521,11 +538,13 @@ def login(api_key: str, api_url: str) -> None:
         console.print(f"Unexpected response {resp.status_code}. Please try again.")
         sys.exit(1)
 
-    save_config({
-        "api_key": api_key,
-        "api_url": api_url,
-        "logged_in_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    })
+    save_config(
+        {
+            "api_key": api_key,
+            "api_url": api_url,
+            "logged_in_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
     console.print("[green]Logged in successfully.[/green]")
 
 

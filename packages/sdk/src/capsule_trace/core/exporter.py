@@ -1,4 +1,4 @@
-﻿"""Export a captured session to the .capsule binary format."""
+"""Export a captured session to the .capsule binary format."""
 
 from __future__ import annotations
 
@@ -8,22 +8,23 @@ import json
 import platform
 import sys
 import tarfile
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import zstandard as zstd
 
 from capsule_trace.core.models import (
-    CapsuleCompression,
     CapsuleEncryption,
     CapsuleIntegrity,
     CapsuleManifest,
     CapsuleProducer,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 try:
-    from capsule_trace import __version__ as _SDK_VERSION
+    from capsule_trace import __version__ as _SDK_VERSION  # noqa: N812
 except ImportError:
     _SDK_VERSION = "0.0.0"
 
@@ -81,7 +82,7 @@ def export_capsule(
 
         # manifest.json — built last so hashes are correct
         manifest = CapsuleManifest(
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             session_id=session_id,
             integrity=CapsuleIntegrity(
                 events_hash=_sha256_of_files(event_blobs),

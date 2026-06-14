@@ -1,4 +1,4 @@
-﻿"""Unit tests for Pydantic data models."""
+"""Unit tests for Pydantic data models."""
 
 from __future__ import annotations
 

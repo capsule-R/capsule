@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.auth import (
     _create_token,
-    _decode_token,
     _decode_token_payload,
     create_access_token,
     create_refresh_token,
@@ -20,12 +19,6 @@ from capsule_cloud.auth import (
     hash_password,
     verify_password,
 )
-
-# In-memory set of consumed password-reset JTIs.
-# Prevents a reset link from being replayed within its 1-hour window.
-# NOTE: This is per-process. Multi-worker deployments should replace this
-#       with a shared store (Redis SETEX, or a DB-backed blocklist table).
-_used_reset_jtis: set[str] = set()
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud.models import User, Workspace, WorkspaceMember
@@ -41,6 +34,12 @@ from capsule_cloud.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# In-memory set of consumed password-reset JTIs.
+# Prevents a reset link from being replayed within its 1-hour window.
+# NOTE: This is per-process. Multi-worker deployments should replace this
+#       with a shared store (Redis SETEX, or a DB-backed blocklist table).
+_used_reset_jtis: set[str] = set()
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

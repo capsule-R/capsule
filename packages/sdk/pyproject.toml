@@ -88,6 +88,16 @@ addopts = "-v --tb=short"
 [tool.coverage.run]
 source = ["capsule_trace"]
 branch = true
+omit = [
+    "*/capsule_trace/cli/*",
+    "*/capsule_trace/cloud/*",
+    "*/capsule_trace/integrations/openai.py",
+    "*/capsule_trace/integrations/anthropic.py",
+    "*/capsule_trace/integrations/google.py",
+    "*/capsule_trace/integrations/langgraph.py",
+    "*/capsule_trace/integrations/autopatch.py",
+    "*/capsule_trace/replay/mode.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [

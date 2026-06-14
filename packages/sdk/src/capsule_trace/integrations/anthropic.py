@@ -1,4 +1,4 @@
-﻿"""Anthropic SDK integration — patches messages.create (sync + async)."""
+"""Anthropic SDK integration — patches messages.create (sync + async)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def patch() -> None:
         return
 
     try:
-        import anthropic  # type: ignore[import-untyped]
+        import anthropic
     except ImportError:
         return
 
@@ -110,9 +110,7 @@ def _build_request_payload(kwargs: dict[str, Any]) -> LLMCallPayload:
     )
 
 
-def _complete_payload(
-    payload: LLMCallPayload, response: Any, duration_ms: float
-) -> LLMCallPayload:
+def _complete_payload(payload: LLMCallPayload, response: Any, duration_ms: float) -> LLMCallPayload:
     try:
         content_text: str | None = None
         tool_calls: list[Any] = []

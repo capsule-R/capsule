@@ -1,20 +1,22 @@
-﻿"""Import a .capsule file back into the local SQLite store."""
+"""Import a .capsule file back into the local SQLite store."""
 
 from __future__ import annotations
 
 import io
 import json
 import tarfile
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import zstandard as zstd
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from capsule_trace.core.models import (
     CapsuleManifest,
     Event,
     EventType,
     SessionMetadata,
-    SessionStatus,
 )
 
 

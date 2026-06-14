@@ -1,10 +1,11 @@
-﻿"""Abstract storage backend protocol."""
+"""Abstract storage backend protocol."""
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from capsule_trace.core.models import Event, SessionMetadata
+if TYPE_CHECKING:
+    from capsule_trace.core.models import Event, SessionMetadata
 
 
 @runtime_checkable

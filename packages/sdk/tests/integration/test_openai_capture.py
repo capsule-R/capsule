@@ -1,14 +1,13 @@
-﻿"""Integration test — OpenAI SDK capture with mocked responses."""
+"""Integration test — OpenAI SDK capture with mocked responses."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from capsule_trace.core.models import EventType, SessionStatus
 from capsule_trace.core.session import Session
-from capsule_trace.integrations.openai import patch as patch_openai
 from capsule_trace.storage.sqlite import SQLiteBackend
 
 
@@ -37,7 +36,13 @@ def test_openai_llm_call_captured(tmp_path, backend):
         session_id = s.session_id
 
         # Simulate what the patched method does
-        from capsule_trace.core.models import Event, LLMCallPayload, LLMMessage, LLMResponse, LLMUsage
+        from capsule_trace.core.models import (
+            Event,
+            LLMCallPayload,
+            LLMMessage,
+            LLMResponse,
+            LLMUsage,
+        )
 
         payload = LLMCallPayload(
             provider="openai",

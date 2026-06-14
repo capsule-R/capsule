@@ -13,19 +13,14 @@ import ulid
 import zstandard as zstd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Hard cap on decompressed archive size to prevent decompression bombs.
-_MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
-# Per-member size limit when reading individual tar entries into memory.
-_MAX_TAR_MEMBER_BYTES = 50 * 1024 * 1024  # 50 MB
-
-from capsule_cloud.auth import authenticate_api_key, get_current_user, get_workspace_member
+from capsule_cloud.auth import get_current_user, get_workspace_member
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud import storage as _storage
-from capsule_cloud.models import ApiKey, Session as CloudSession, User, Workspace
+from capsule_cloud.models import Session as CloudSession, User, Workspace
 from capsule_cloud.schemas import (
     BranchCreateRequest,
     BranchCreateResponse,
@@ -37,6 +32,11 @@ from capsule_cloud.schemas import (
     SessionUploadMetadata,
     TriggerReplayRequest,
 )
+
+# Hard cap on decompressed archive size to prevent decompression bombs.
+_MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
+# Per-member size limit when reading individual tar entries into memory.
+_MAX_TAR_MEMBER_BYTES = 50 * 1024 * 1024  # 50 MB
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/sessions", tags=["sessions"])
 

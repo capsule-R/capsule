@@ -1,3 +1,3 @@
-﻿from capsule_trace.cli.main import main
+from capsule_trace.cli.main import main
 
 __all__ = ["main"]
