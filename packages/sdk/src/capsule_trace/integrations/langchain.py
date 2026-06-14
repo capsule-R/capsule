@@ -38,10 +38,10 @@ try:
     _LANGCHAIN_AVAILABLE = True
 except ImportError:
     _LANGCHAIN_AVAILABLE = False
-    BaseCallbackHandler = object  # type: ignore[assignment,misc]
+    BaseCallbackHandler = object  # type: ignore[assignment]
 
 
-class CapsuleCallbackHandler(BaseCallbackHandler):
+class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
     """LangChain callback handler that records LLM calls and tool invocations
     into the current Capsule session.
 

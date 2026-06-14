@@ -23,8 +23,8 @@ impl CapsuleArchive {
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ReplayError> {
         // Decompress zstd
-        let mut decoder = zstd::Decoder::new(Cursor::new(data))
-            .map_err(|e| ReplayError::Zstd(e.to_string()))?;
+        let mut decoder =
+            zstd::Decoder::new(Cursor::new(data)).map_err(|e| ReplayError::Zstd(e.to_string()))?;
         let mut tar_bytes = Vec::new();
         decoder
             .read_to_end(&mut tar_bytes)
@@ -50,7 +50,9 @@ impl CapsuleArchive {
 
         // Version check
         if !manifest.capsule_version.starts_with("1.") {
-            return Err(ReplayError::UnsupportedVersion(manifest.capsule_version.clone()));
+            return Err(ReplayError::UnsupportedVersion(
+                manifest.capsule_version.clone(),
+            ));
         }
 
         // Parse session
@@ -60,10 +62,8 @@ impl CapsuleArchive {
         let session: SessionMetadata = serde_json::from_slice(session_bytes)?;
 
         // Parse events (sorted by filename)
-        let mut event_files: Vec<&String> = files
-            .keys()
-            .filter(|k| k.starts_with("events/"))
-            .collect();
+        let mut event_files: Vec<&String> =
+            files.keys().filter(|k| k.starts_with("events/")).collect();
         event_files.sort();
 
         let mut events = Vec::new();

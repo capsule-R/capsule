@@ -7,7 +7,6 @@ import json
 import tarfile
 import uuid
 
-import pytest
 import zstandard as zstd
 
 
