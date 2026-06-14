@@ -106,10 +106,10 @@ export default function TermsPage() {
         background: 'var(--bg-base)',
         zIndex: 10,
       }}>
-        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
           <LogoMark size={28} />
           <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '-0.01em' }}>Capsule</span>
-        </a>
+        </Link>
         <div style={{ display: 'flex', gap: 24, fontSize: 13.5, color: 'var(--text-secondary)' }}>
           <Link href="/privacy" style={{ color: 'var(--text-secondary)' }}>Privacy Policy</Link>
           <Link href="/login" style={{ color: 'var(--text-secondary)' }}>Log in</Link>

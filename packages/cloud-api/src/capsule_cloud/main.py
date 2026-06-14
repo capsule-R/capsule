@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import structlog
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -110,7 +110,6 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(422)
     async def validation_error_handler(request: Request, exc):  # type: ignore[no-untyped-def]
-        from fastapi.exceptions import RequestValidationError
         detail = str(exc)
         if hasattr(exc, "errors"):
             detail = str(exc.errors())

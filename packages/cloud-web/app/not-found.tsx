@@ -18,10 +18,10 @@ export default function NotFound() {
       }} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 440 }}>
-        <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 48, textDecoration: 'none' }}>
+        <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 48, textDecoration: 'none' }}>
           <LogoMark size={36} />
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 18, color: 'var(--text-primary)' }}>Capsule</span>
-        </a>
+        </Link>
 
         {/* 404 display */}
         <div style={{

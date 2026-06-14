@@ -254,7 +254,7 @@ export default function DashboardPage() {
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>{a.when}</span>
             </Link>
           ))}
-          <a className="btn btn-subtle btn-sm" href="/dashboard/sessions" style={{ width: '100%', marginTop: 14 }}>View all sessions</a>
+          <Link className="btn btn-subtle btn-sm" href="/dashboard/sessions" style={{ width: '100%', marginTop: 14 }}>View all sessions</Link>
         </div>
       </div>
 

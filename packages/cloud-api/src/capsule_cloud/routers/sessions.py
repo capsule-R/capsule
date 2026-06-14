@@ -608,7 +608,7 @@ async def trigger_replay(
     replay_error: str | None = None
     replay_result: dict | None = None
 
-    if settings.modal_token_id and settings.modal_token_secret:
+    if settings.modal_token_id and settings.modal_token_secret:  # pragma: no cover
         try:
             import modal  # type: ignore[import-untyped]
 

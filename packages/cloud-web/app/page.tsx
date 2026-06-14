@@ -57,10 +57,10 @@ function Nav() {
         transition: 'background .25s, border-color .25s',
       }}>
         <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', height: 64 }}>
-          <a className="brand" href="/" style={{ textDecoration: 'none' }}>
+          <Link className="brand" href="/" style={{ textDecoration: 'none' }}>
             <LogoMark size={38} />
             <span className="wordmark" style={{ fontSize: 17 }}>Capsule</span>
-          </a>
+          </Link>
           <div style={{ flex: 1 }} />
           <div className="lp-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 26, marginRight: 28 }}>
             {NAV_LINKS.map(({ label, href }) => (
@@ -510,10 +510,10 @@ export default function LandingPage() {
         <div className="lp-wrap">
           <div className="lp-foot-top">
             <div className="lp-foot-brand">
-              <a className="brand" href="/" style={{ textDecoration: 'none' }}>
+              <Link className="brand" href="/" style={{ textDecoration: 'none' }}>
                 <LogoMark size={42} />
                 <span className="wordmark">Capsule</span>
-              </a>
+              </Link>
               <p>Deterministic replay and time-travel debugging for AI agents.</p>
             </div>
             <div className="lp-foot-col">
@@ -536,8 +536,8 @@ export default function LandingPage() {
               <a href="#compliance">Compliance</a>
               <a href="#">Careers</a>
               <a href="#">Contact</a>
-              <a href="/terms">Terms</a>
-              <a href="/privacy">Privacy</a>
+              <Link href="/terms">Terms</Link>
+              <Link href="/privacy">Privacy</Link>
             </div>
           </div>
           <div className="lp-foot-bottom">

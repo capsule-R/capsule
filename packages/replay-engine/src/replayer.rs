@@ -4,7 +4,6 @@ use crate::archive::CapsuleArchive;
 use crate::cassette::CassetteStore;
 use crate::error::ReplayError;
 use crate::event::Event;
-use crate::session::ReplaySession;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -62,10 +61,7 @@ impl Replayer {
     /// Replay events up to (not including) `branch_step`, then return the
     /// pre-branch context. The caller can inject modifications and continue
     /// from there with live LLM calls.
-    pub fn branch_context(
-        &self,
-        branch_step: usize,
-    ) -> Result<Vec<Event>, ReplayError> {
+    pub fn branch_context(&self, branch_step: usize) -> Result<Vec<Event>, ReplayError> {
         if branch_step >= self.archive.events.len() {
             return Err(ReplayError::StepOutOfRange(branch_step));
         }
@@ -108,16 +104,13 @@ impl Replayer {
             let mut replayed_event = event.clone();
 
             if event.event_type == "llm_call" {
-                if let Some(cassette_ref) = event.payload.get("cassette_ref").and_then(|v| v.as_str()) {
+                if let Some(cassette_ref) =
+                    event.payload.get("cassette_ref").and_then(|v| v.as_str())
+                {
                     if let Some(cassette_data) = self.cassettes.get(cassette_ref) {
                         // Inject stored response into replayed event
-                        if let serde_json::Value::Object(ref mut payload) =
-                            replayed_event.payload
-                        {
-                            payload.insert(
-                                "replayed_response".to_string(),
-                                cassette_data.clone(),
-                            );
+                        if let serde_json::Value::Object(ref mut payload) = replayed_event.payload {
+                            payload.insert("replayed_response".to_string(), cassette_data.clone());
                         }
                     }
                 }

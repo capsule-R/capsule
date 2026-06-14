@@ -6,11 +6,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     Column,
     DateTime,
     ForeignKey,
-    Index,
     Integer,
     Numeric,
     String,

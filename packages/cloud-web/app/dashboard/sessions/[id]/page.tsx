@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import Link from 'next/link';
 import { DashboardShell } from '@/components/DashboardShell';
 import { ToastHost, showToast } from '@/components/Toast';
 import {
@@ -431,7 +432,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
         <div className="empty">
           <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-secondary)', marginBottom: 6 }}>Session not found</div>
           <div style={{ fontSize: 13.5 }}>It may have been deleted or expired past its retention window.</div>
-          <a className="btn btn-ghost btn-sm" href="/dashboard/sessions" style={{ marginTop: 18 }}>← Back to sessions</a>
+          <Link className="btn btn-ghost btn-sm" href="/dashboard/sessions" style={{ marginTop: 18 }}>← Back to sessions</Link>
         </div>
       </DashboardShell>
     );

@@ -7,6 +7,8 @@ from uuid import uuid4
 
 import pytest
 
+pytest.importorskip("langchain_core", reason="langchain-core not installed")
+
 from capsule_trace.core.models import EventType
 from capsule_trace.core.session import Session
 from capsule_trace.storage.sqlite import SQLiteBackend
