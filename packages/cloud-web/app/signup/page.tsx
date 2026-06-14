@@ -62,10 +62,10 @@ export default function SignupPage() {
       {/* LEFT: form */}
       <div className="auth-form-side">
         <div className="auth-top">
-          <a className="brand" href="/">
+          <Link className="brand" href="/">
             <LogoMark />
             <span className="wordmark">Capsule</span>
-          </a>
+          </Link>
           <Link className="back" href="/login">Log in →</Link>
         </div>
 

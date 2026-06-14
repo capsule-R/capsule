@@ -30,10 +30,10 @@ export default function ForgotPasswordPage() {
     <div className="auth">
       <div className="auth-form-side">
         <div className="auth-top">
-          <a className="brand" href="/">
+          <Link className="brand" href="/">
             <LogoMark />
             <span className="wordmark">Capsule</span>
-          </a>
+          </Link>
           <Link className="back" href="/login">Back to login →</Link>
         </div>
 
@@ -58,12 +58,12 @@ export default function ForgotPasswordPage() {
                   <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--warn)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
                     Dev mode — reset token (not shown in production)
                   </div>
-                  <a
+                  <Link
                     href={`/reset-password?token=${encodeURIComponent(devToken)}`}
                     style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--text-secondary)', wordBreak: 'break-all', textDecoration: 'underline' }}
                   >
                     /reset-password?token={devToken.slice(0, 40)}…
-                  </a>
+                  </Link>
                   <br />
                   <Link
                     href={`/reset-password?token=${encodeURIComponent(devToken)}`}
