@@ -86,14 +86,16 @@ async def upload_session(
     raw = await file.read()
     file_size = len(raw)
 
-    # Enforce upload size limit based on plan
-    settings = get_settings()
-    max_bytes = _PLAN_MAX_UPLOAD.get(ws.plan_tier, settings.max_upload_size_hobby)
-    if file_size > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File exceeds {max_bytes // (1024*1024)} MB limit for plan '{ws.plan_tier}'",
-        )
+    # billing disabled for launch — plan-tier upload-size enforcement disabled.
+    # The _PLAN_MAX_UPLOAD logic above is kept intact; the enforcement below is
+    # commented out so no plan tier blocks free users. Re-enable to restore.
+    # settings = get_settings()
+    # max_bytes = _PLAN_MAX_UPLOAD.get(ws.plan_tier, settings.max_upload_size_hobby)
+    # if file_size > max_bytes:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+    #         detail=f"File exceeds {max_bytes // (1024*1024)} MB limit for plan '{ws.plan_tier}'",
+    #     )
 
     # Check storage quota
     if ws.storage_used_bytes + file_size > ws.storage_quota_bytes:

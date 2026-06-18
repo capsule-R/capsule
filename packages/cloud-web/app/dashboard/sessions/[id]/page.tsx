@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, use } from 'react';
 import Link from 'next/link';
 import { DashboardShell } from '@/components/DashboardShell';
 import { ToastHost, showToast } from '@/components/Toast';
@@ -203,8 +203,8 @@ function fmtDuration(ms: number | null | undefined): string {
 }
 
 /* ─── Page ───────────────────────────────────────────────────── */
-export default function SessionDetailPage({ params }: { params: { id: string } }) {
-  const sessionId = params.id;
+export default function SessionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const sessionId = use(params).id;
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [meta, setMeta] = useState<SessionMeta | null>(null);
   const [STEPS, setSteps] = useState<Step[]>([]);
