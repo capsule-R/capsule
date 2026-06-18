@@ -32,7 +32,7 @@ def _build_capsule(session_id: str, events_data: list[dict[str, Any]]) -> bytes:
     }
     manifest = {
         "capsule_version": "1.0",
-        "format_spec_url": "https://capsule.dev/spec/v1.0",
+        "format_spec_url": "https://capsule-five-delta.vercel.app/spec/v1.0",
         "created_at": "2026-05-27T10:00:00Z",
         "session_id": session_id,
         "integrity": {

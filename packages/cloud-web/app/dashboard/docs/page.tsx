@@ -426,7 +426,7 @@ capsule-trace upload 01J2ABC --tags production`}</Code>
           <H3>manifest.json</H3>
           <Code lang="json">{`{
   "capsule_version": "1.0",
-  "format_spec_url": "https://capsule.dev/spec/v1.0",
+  "format_spec_url": "https://capsule-five-delta.vercel.app/spec/v1.0",
   "created_at": "2026-05-30T12:00:00Z",
   "session_id": "01J2ABCDEF...",
   "integrity": {

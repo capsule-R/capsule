@@ -119,20 +119,11 @@ export default function LoginPage() {
         <div className="auth-aside-grid" />
         <div className="auth-aside-glow" />
         <div className="aside-content">
-          <blockquote className="aside-quote">
-            &ldquo;We cut agent incident triage from{' '}
-            <span className="g">half a day to twenty minutes.</span>{' '}
-            A teammate just sends the{' '}
-            <span className="mono" style={{ color: 'var(--text-primary)' }}>.capsule</span>{' '}
-            and I replay the exact failure.&rdquo;
+          <blockquote className="aside-quote" style={{ marginTop: '2rem' }}>
+            Capture the exact state of your agent at the moment of failure. Debug with{' '}
+            <span className="g">absolute certainty</span>,{' '}
+            every single time.
           </blockquote>
-          <div className="aside-by">
-            <div className="avatar">MR</div>
-            <div>
-              <div className="n">Marisol Reyes</div>
-              <div className="r">Staff Engineer, Ledgerline</div>
-            </div>
-          </div>
           <div className="aside-card">
             <div className="ach">
               capsule-trace replay sess_8f2a91c4

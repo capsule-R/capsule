@@ -48,7 +48,7 @@ session.capsule
 ```json
 {
   "capsule_version": "1.0",
-  "format_spec_url": "https://capsule.dev/spec/v1.0",
+  "format_spec_url": "https://capsule-five-delta.vercel.app/spec/v1.0",
   "created_at": "2026-05-27T10:30:00.000Z",
   "session_id": "ses_01HXYZ123456",
   "integrity": {
@@ -340,5 +340,5 @@ The first 4 bytes of a valid `.capsule` file are the zstd magic bytes: `0xFD 0x2
 
 ---
 
-*This specification is maintained at https://capsule.dev/spec/v1.0*  
+*This specification is maintained at https://capsule-five-delta.vercel.app/spec/v1.0*  
 *To propose changes, open a Format RFC issue on GitHub.*

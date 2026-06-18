@@ -217,7 +217,7 @@ zstd compressed. SHA-256 integrity hash. Fully open spec. Import it in any langu
 
 Upload capsules to a shared team workspace. Browse, inspect, replay, and branch from the browser. Share a replay link without granting API access.
 
-[capsule.dev](https://capsule.dev)
+[capsule-five-delta.vercel.app](https://capsule-five-delta.vercel.app)
 
 ---
 

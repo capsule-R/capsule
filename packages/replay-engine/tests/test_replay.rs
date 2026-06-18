@@ -32,7 +32,7 @@ fn build_minimal_capsule() -> Vec<u8> {
 
     let manifest_json = serde_json::json!({
         "capsule_version": "1.0",
-        "format_spec_url": "https://capsule.dev/spec/v1.0",
+        "format_spec_url": "https://capsule-five-delta.vercel.app/spec/v1.0",
         "created_at": "2026-05-27T10:00:00Z",
         "session_id": "ses_test001",
         "integrity": {
