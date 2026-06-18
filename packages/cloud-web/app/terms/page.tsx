@@ -81,7 +81,7 @@ const SECTIONS = [
   {
     id: 'changes',
     title: '15. Changes to Terms',
-    body: `We may update these Terms from time to time. Material changes will be communicated by email or a prominent notice in the dashboard at least 14 days before taking effect. Continued use of the Service after the effective date constitutes acceptance of the revised Terms. The current version is always available at capsule.dev/terms.`,
+    body: `We may update these Terms from time to time. Material changes will be communicated by email or a prominent notice in the dashboard at least 14 days before taking effect. Continued use of the Service after the effective date constitutes acceptance of the revised Terms. The current version is always available at capsule-five-delta.vercel.app/terms.`,
   },
   {
     id: 'contact',

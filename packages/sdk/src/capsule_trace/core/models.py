@@ -227,7 +227,7 @@ class CapsuleProducer(BaseModel):
 
 class CapsuleManifest(BaseModel):
     capsule_version: str = "1.0"
-    format_spec_url: str = "https://capsule.dev/spec/v1.0"
+    format_spec_url: str = "https://capsule-five-delta.vercel.app/spec/v1.0"
     created_at: datetime = Field(default_factory=_now)
     session_id: str = ""
     integrity: CapsuleIntegrity = Field(default_factory=CapsuleIntegrity)

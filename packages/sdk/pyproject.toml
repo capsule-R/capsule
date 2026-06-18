@@ -58,7 +58,7 @@ dev = [
 capsule-trace = "capsule_trace.cli:main"
 
 [project.urls]
-Homepage = "https://capsule.dev"
+Homepage = "https://capsule-five-delta.vercel.app"
 Documentation = "https://docs.capsule.dev"
 Repository = "https://github.com/capsule-dev/capsule"
 Issues = "https://github.com/capsule-dev/capsule/issues"

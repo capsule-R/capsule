@@ -194,7 +194,7 @@ class Settings(BaseSettings):
     # set ALLOWED_ORIGINS explicitly in production with only your own domains.
     allowed_origins: str = (
         "http://localhost:3000,"
-        "https://capsule.dev"
+        "https://capsule-five-delta.vercel.app"
     )
 
     def get_cors_origins(self) -> list[str]:
@@ -203,7 +203,7 @@ class Settings(BaseSettings):
         if not v:
             return [
                 "http://localhost:3000",
-                "https://capsule.dev",
+                "https://capsule-five-delta.vercel.app",
             ]
         if v.startswith("["):
             import json

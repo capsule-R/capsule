@@ -71,7 +71,7 @@ const SECTIONS = [
   {
     id: 'changes',
     title: '13. Changes to This Policy',
-    body: `We may update this Privacy Policy to reflect changes in our practices or applicable law. Material changes will be communicated by email or a prominent notice in the dashboard at least 14 days before taking effect. The current version is always available at capsule.dev/privacy. Continued use of the Service after the effective date constitutes acceptance of the revised policy.`,
+    body: `We may update this Privacy Policy to reflect changes in our practices or applicable law. Material changes will be communicated by email or a prominent notice in the dashboard at least 14 days before taking effect. The current version is always available at capsule-five-delta.vercel.app/privacy. Continued use of the Service after the effective date constitutes acceptance of the revised policy.`,
   },
   {
     id: 'contact',
