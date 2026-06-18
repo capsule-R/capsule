@@ -35,7 +35,8 @@ const NAV_LINKS = [
   { label: 'The .capsule file', href: '#capsule' },
   { label: 'Features', href: '#features' },
   { label: 'Compliance', href: '#compliance' },
-  { label: 'Pricing', href: '#pricing' },
+  // billing disabled for launch
+  // { label: 'Pricing', href: '#pricing' },
 ];
 
 function Nav() {
@@ -283,6 +284,8 @@ const COMPLIANCE = [
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.6" /><rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.6" /><path d="M7 7h.01M7 17h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg> },
 ];
 
+// TODO: billing disabled for launch — pricing plans hidden
+/*
 const PLANS = [
   { name: 'Free', price: '$0', unit: '/ mo', desc: 'For trying deterministic replay locally.', cta: 'Start free', featured: false,
     features: ['Local SDK only', '1,000 sessions / mo', '7-day retention', 'Community support'] },
@@ -293,10 +296,12 @@ const PLANS = [
   { name: 'Enterprise', price: 'Custom', unit: '', desc: 'For regulated teams with compliance needs.', cta: 'Talk to sales', featured: false,
     features: ['Self-host / VPC deployment', 'SSO', 'Compliance reports', 'SLA'] },
 ];
+*/
 
-const CHECK = (
-  <span className="ck"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-);
+// billing disabled for launch: CHECK was only used by the pricing section
+// const CHECK = (
+//   <span className="ck"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+// );
 
 const ARROW = (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -336,15 +341,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── TRUST STRIP ── */}
-      <section className="lp-section bd" style={{ padding: 0 }}>
-        <div className="lp-wrap lp-trust">
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Trusted by engineering teams</span>
-          {['Helix AI', 'Ledgerline', 'Statute', 'Northwind', 'Verador'].map((n) => (
-            <span key={n} className="t">{n}</span>
-          ))}
-        </div>
-      </section>
+
 
       {/* ── HOW IT WORKS ── */}
       <section id="how" className="lp-section">
@@ -470,7 +467,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── PRICING ── */}
+      {/* ── PRICING ── billing disabled for launch ──
       <section id="pricing" className="lp-section bd">
         <div className="lp-wrap">
           <div className="lp-shead reveal">
@@ -492,6 +489,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      */}
 
       {/* ── FINAL CTA ── */}
       <section className="lp-final">
@@ -521,7 +519,7 @@ export default function LandingPage() {
               <a href="#how">How it works</a>
               <a href="#features">Features</a>
               <a href="#capsule">The .capsule file</a>
-              <a href="#pricing">Pricing</a>
+              {/* billing disabled for launch: <a href="#pricing">Pricing</a> */}
             </div>
             <div className="lp-foot-col">
               <h5>Developers</h5>

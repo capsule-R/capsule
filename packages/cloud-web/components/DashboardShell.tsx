@@ -30,10 +30,11 @@ const NAV_ITEMS = [
         id: 'keys', label: 'API Keys', href: '/dashboard/settings/api-keys',
         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="4.2" stroke="currentColor" strokeWidth="1.7"/><path d="M11 11l8 8M16 16l2-2M14 18l2-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
       },
-      {
-        id: 'billing', label: 'Billing & Plan', href: '/dashboard/settings/billing',
-        icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.7"/><path d="M3 9.5h18" stroke="currentColor" strokeWidth="1.7"/><path d="M7 14.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>,
-      },
+      // billing disabled for launch
+      // {
+      //   id: 'billing', label: 'Billing & Plan', href: '/dashboard/settings/billing',
+      //   icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.7"/><path d="M3 9.5h18" stroke="currentColor" strokeWidth="1.7"/><path d="M7 14.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>,
+      // },
     ],
   },
 ];
