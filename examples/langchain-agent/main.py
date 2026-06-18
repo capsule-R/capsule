@@ -1,20 +1,26 @@
 """
 Capsule SDK — LangChain Agent Example
 ======================================
-Demonstrates capturing a LangChain agent using CapsuleCallbackHandler.
+What this does: runs a billing agent that looks up a customer balance and
+processes a refund, capturing the LangChain LLM call via CapsuleCallbackHandler
+and the tool calls via @capture_tool_call — all recorded into one .capsule
+session. Runs in "demo mode" (no live LLM call) if OPENAI_API_KEY is not set,
+so it works with no API key.
 
 Requirements:
-    pip install capsule-sdk[langchain] langchain-openai
+    pip install "capsule-trace[langchain]" langchain-openai
 
 Run:
     OPENAI_API_KEY=sk-... python examples/langchain-agent/main.py
+    # or, without a key, it runs in demo mode:
+    python examples/langchain-agent/main.py
 """
 
 from __future__ import annotations
 
-import capsule
-from capsule.integrations.langchain import CapsuleCallbackHandler
-from capsule.integrations.tools import capture_tool_call
+import capsule_trace as capsule
+from capsule_trace.integrations.langchain import CapsuleCallbackHandler
+from capsule_trace.integrations.tools import capture_tool_call
 
 
 # ── Define tools ──────────────────────────────────────────────
@@ -80,8 +86,15 @@ def run_billing_agent(customer_id: str, refund_amount: float) -> str:
 
 def _demo_run(customer_id: str, refund_amount: float) -> str:
     """Simulate the agent flow without a real API key."""
-    from capsule.core.context import get_current_session
-    from capsule.core.models import Event, EventType, LLMCallPayload, LLMMessage, LLMResponse, LLMUsage
+    from capsule_trace.core.context import get_current_session
+    from capsule_trace.core.models import (
+        Event,
+        EventType,
+        LLMCallPayload,
+        LLMMessage,
+        LLMResponse,
+        LLMUsage,
+    )
 
     # Tool calls are already captured by @capture_tool_call decorators
     balance = get_customer_balance(customer_id)
@@ -113,7 +126,7 @@ def _demo_run(customer_id: str, refund_amount: float) -> str:
 
 
 def main() -> None:
-    from capsule.storage.sqlite import SQLiteBackend
+    from capsule_trace.storage.sqlite import SQLiteBackend
 
     print("Running billing agent (demo mode)...\n")
     output = run_billing_agent("cust_001", 500.0)

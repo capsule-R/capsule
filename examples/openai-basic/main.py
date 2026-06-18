@@ -1,14 +1,18 @@
 """
 Capsule SDK — OpenAI Basic Example
 ===================================
-Demonstrates capturing an OpenAI agent with one decorator,
-then listing and exporting the captured session.
+What this does: wraps a single-turn OpenAI agent with the @capsule.trace
+decorator so every LLM call is captured to a .capsule session, then lists
+the captured session and exports it to a portable .capsule file. Runs in a
+mock "demo mode" if OPENAI_API_KEY is not set, so it works with no API key.
 
 Requirements:
-    pip install capsule-sdk openai
+    pip install capsule-trace openai
 
 Run:
     OPENAI_API_KEY=sk-... python examples/openai-basic/main.py
+    # or, without a key, it runs in demo mode:
+    python examples/openai-basic/main.py
 """
 
 from __future__ import annotations
@@ -16,11 +20,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import capsule
-from capsule.storage.sqlite import SQLiteBackend
+import capsule_trace as capsule
+from capsule_trace.storage.sqlite import SQLiteBackend
 
 # ── Auto-patch OpenAI at import time ──────────────────────────
-from capsule.integrations.autopatch import autopatch_all
+from capsule_trace.integrations.autopatch import autopatch_all
 
 autopatch_all()
 
@@ -73,7 +77,7 @@ def main() -> None:
         print(f"  Duration: {s.duration_ms:.0f}ms\n")
 
         # Export to .capsule file
-        from capsule.core.exporter import export_capsule
+        from capsule_trace.core.exporter import export_capsule
 
         out = Path("example-session.capsule")
         export_capsule(s.session_id, backend, out)
@@ -86,9 +90,15 @@ def main() -> None:
 
 def _run_demo() -> None:
     """Simulate a capture without a real API key to show the data model."""
-    import capsule
-    from capsule.core.models import Event, EventType, LLMCallPayload, LLMMessage, LLMResponse, LLMUsage
-    from capsule.core.session import Session
+    from capsule_trace.core.models import (
+        Event,
+        EventType,
+        LLMCallPayload,
+        LLMMessage,
+        LLMResponse,
+        LLMUsage,
+    )
+    from capsule_trace.core.session import Session
 
     storage = SQLiteBackend.default()
 

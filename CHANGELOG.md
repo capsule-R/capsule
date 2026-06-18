@@ -7,16 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+<!-- Add new releases above this line -->
+
+## [0.1.1] - 2026-06
 
 ### Added
-- Initial monorepo scaffold (Sprint 1)
-- `.capsule` format specification v1.0
-- Python SDK project structure
-- Rust replay engine project structure
-- CI/CD pipeline (GitHub Actions)
-- Pre-commit hooks (ruff, mypy, clippy, prettier)
+- `login`, `logout`, `upload` CLI commands
+- `load_config()` / `save_config()` shared helpers
+- `capsule-trace` entry point
 
----
+### Fixed
+- OpenAI integration step-recording (descriptor + MagicMock bugs)
 
-<!-- Add new releases above this line -->
+## [0.1.0] - 2026-05
+
+### Added
+- Initial release
+- `@capsule.trace` decorator
+- OpenAI and Anthropic integrations
+- Cassette-based deterministic replay
+- Branch from any step
+- `.capsule` file export/import
+- LangChain and LangGraph integrations
+- Full CLI
