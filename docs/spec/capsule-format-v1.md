@@ -265,6 +265,63 @@ Verification must be performed before any replay operation. A mismatch indicates
 
 ---
 
+## Implementing a Compatible Reader
+
+A `.capsule` reader in any language follows these steps. The only hard
+dependencies are a zstd decompressor, a tar extractor, and a JSON parser.
+
+```
+function read_capsule(path):
+    # 1. Validate magic bytes — first 4 bytes must be zstd: FD 2F B5 28
+    bytes = read_first_4_bytes(path)
+    assert bytes == [0xFD, 0x2F, 0xB5, 0x28]   else error "not a .capsule file"
+
+    # 2. Decompress zstd → raw tar stream
+    tar_stream = zstd_decompress(read_all(path))
+
+    # 3. Extract the tar into an in-memory map: { entry_name -> bytes }
+    entries = tar_extract(tar_stream)
+
+    # 4. Parse and check the manifest
+    manifest = json_parse(entries["manifest.json"])
+    assert manifest.capsule_version starts with "1."   # major version 1 → readable
+    #   Minor versions are additive: ignore unknown fields, do not error on them.
+
+    # 5. (If encryption.enabled) decrypt the tar payload first using the
+    #    caller-supplied 256-bit key (XSalsa20-Poly1305 / libsodium secretbox),
+    #    then re-run steps 3–4 on the decrypted bytes.
+
+    # 6. Verify integrity BEFORE using any data
+    for dir in ["events", "cassettes", "snapshots"]:
+        files   = sorted(entries where name starts with dir + "/")
+        computed = sha256(concat(file_contents in filename order))
+        assert computed == manifest.integrity[dir + "_hash"]   else error "corrupt/tampered"
+
+    # 7. Load session metadata
+    session = json_parse(entries["session.json"])
+
+    # 8. Load events in ascending filename order (the {NNNN}- prefix is the order)
+    events = []
+    for name in sorted(entries where name matches "events/####-*.json"):
+        events.append(json_parse(entries[name]))
+
+    # 9. To REPLAY deterministically: for each event with a cassette_ref,
+    #    load cassettes/<id>.json and return its raw_response instead of making
+    #    a live API call. Apply snapshots/step-####.json to restore memory state.
+
+    return { manifest, session, events }
+```
+
+Key rules a compatible reader must honour:
+
+- **Major version gate** — refuse a file whose `capsule_version` major number is
+  newer than the reader supports; accept any minor version within a supported major.
+- **Forward compatibility** — skip unknown JSON fields silently (never error).
+- **Verify before use** — always run integrity checks (step 6) before replaying.
+- **Filename ordering is canonical** — never rely on tar entry order; sort by name.
+
+---
+
 ## Encryption (Optional)
 
 When `encryption.enabled = true`, the entire tar archive (before zstd compression) is encrypted using XSalsa20-Poly1305 (libsodium `secretbox`) with a customer-supplied 256-bit key. The key is never stored in the file. The `key_hint` field may contain a non-secret identifier to help the reader locate the correct key.

@@ -1,7 +1,8 @@
 [![PyPI](https://img.shields.io/pypi/v/capsule-trace.svg)](https://pypi.org/project/capsule-trace/)
-[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/capsule-trace/)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://pypi.org/project/capsule-trace/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/capsule-trace.svg)](https://pypi.org/project/capsule-trace/)
+[![CI](https://github.com/capsule-R/capsule/actions/workflows/ci.yml/badge.svg)](https://github.com/capsule-R/capsule/actions/workflows/ci.yml)
 
 # Capsule — Deterministic Replay for AI Agents
 

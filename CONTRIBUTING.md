@@ -40,38 +40,78 @@ cd ../replay-engine
 cargo build
 ```
 
-### Verify Setup
+#### Cloud API (`packages/cloud-api/`)
 
 ```bash
-# Python tests
-cd packages/sdk
-pytest tests/
-
-# Rust tests
-cd packages/replay-engine
-cargo test
-
-# Type checking
-cd packages/sdk
-mypy --strict src/
+cd packages/cloud-api
+python -m venv .venv
+source .venv/bin/activate        # or .venv\Scripts\activate on Windows
+pip install -e ".[dev]"
+cp .env.example .env             # then fill in the values it documents
 ```
+
+#### Cloud Web (`packages/cloud-web/`)
+
+```bash
+cd packages/cloud-web
+npm install
+cp .env.local.example .env.local  # set NEXT_PUBLIC_API_URL
+```
+
+### Running Tests
+
+```bash
+# SDK (Python)
+pytest packages/sdk/tests/
+
+# Cloud API (FastAPI) — must keep coverage ≥ 80%
+cd packages/cloud-api && pytest tests/ -v --cov=capsule_cloud
+
+# Cloud Web (Next.js)
+cd packages/cloud-web && npm run lint && npm run build
+
+# Rust replay engine
+cd packages/replay-engine && cargo test
+
+# Type checking (SDK)
+cd packages/sdk && mypy --strict src/
+```
+
+### Running Locally
+
+```bash
+# Cloud API — http://localhost:8000  (docs at /api/v1/docs)
+cd packages/cloud-api
+uvicorn capsule_cloud.main:app --reload
+
+# Cloud Web — http://localhost:3000
+cd packages/cloud-web
+npm run dev
+```
+
+Required `.env` variables are documented in
+[`packages/cloud-api/.env.example`](packages/cloud-api/.env.example) (backend)
+and [`packages/cloud-web/.env.local.example`](packages/cloud-web/.env.local.example) (frontend).
+Copy each to `.env` / `.env.local` and fill in the values.
 
 ## Development Workflow
 
-1. **Fork** the repository and create a branch:
+1. **Fork** the repository and create a branch. Use a typed prefix:
+   `fix/` for bug fixes, `feat/` for features, `chore/` for maintenance.
    ```bash
-   git checkout -b feature/your-feature-name
+   git checkout -b feat/your-feature-name
    ```
 
-2. **Make changes** following the code style guides below
+2. **Make changes** following the code style guides below.
+   Keep each PR focused on **one thing** — one fix or one feature per PR.
 
-3. **Write tests** — all new code requires tests with > 80% coverage
+3. **Write tests** — all new features require tests; keep coverage ≥ 80%.
 
 4. **Run the full CI check locally:**
    ```bash
    pre-commit run --all-files
-   pytest tests/ --cov=capsule --cov-fail-under=80
-   mypy --strict src/
+   pytest packages/sdk/tests/ --cov=capsule_trace --cov-fail-under=80
+   mypy --strict packages/sdk/src/
    ```
 
 5. **Submit a PR** with:
