@@ -1,9 +1,16 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Capsule — Deterministic Replay for AI Agents',
   description: 'Capture, replay, and debug every AI agent execution. Time-travel through any session.',
+  // Favicon (app/favicon.ico, app/icon.svg), apple-touch icon (app/apple-icon.png),
+  // and the PWA manifest (app/manifest.ts) are auto-linked by Next from the
+  // file-based metadata conventions — no manual <link> tags needed.
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0A0A0A',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
