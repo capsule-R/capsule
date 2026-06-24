@@ -190,6 +190,7 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     resend_api_key: str = ""
+    resend_from_email: str = "Capsule <onboarding@resend.dev>"
     frontend_url: str = "http://localhost:3000"
 
     # CORS — plain str so pydantic-settings never tries to json.loads() it.
