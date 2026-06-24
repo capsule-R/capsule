@@ -188,6 +188,10 @@ class Settings(BaseSettings):
     max_upload_size_pro: int = 500 * 1024 * 1024
     max_upload_size_business: int = 5 * 1024 * 1024 * 1024
 
+    # Email (Resend)
+    resend_api_key: str = ""
+    frontend_url: str = "http://localhost:3000"
+
     # CORS — plain str so pydantic-settings never tries to json.loads() it.
     # Accepts comma-separated origins or a JSON array string.
     # Wildcards like https://*.vercel.app allow ANY app on that platform —
