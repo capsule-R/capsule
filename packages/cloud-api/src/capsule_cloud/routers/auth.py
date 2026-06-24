@@ -230,20 +230,25 @@ async def forgot_password(
             """
             try:
                 async with httpx.AsyncClient() as client:
-                    await client.post(
+                    response = await client.post(
                         "https://api.resend.com/emails",
                         headers={"Authorization": f"Bearer {settings.resend_api_key}"},
                         json={
-                            "from": "Capsule <onboarding@resend.dev>",
+                            "from": settings.resend_from_email,
                             "to": str(body.email),
                             "subject": "Reset your Capsule password",
                             "html": html_content,
                         },
                         timeout=5.0
                     )
+                    response.raise_for_status()
                 logger.info("password_reset.email_sent", email=str(body.email))
             except Exception as e:
-                logger.error("password_reset.email_failed", email=str(body.email), error=str(e))
+                # If we get an error response, try to log the body too
+                err_msg = str(e)
+                if hasattr(e, 'response') and getattr(e, 'response') is not None and hasattr(e.response, 'text'):
+                    err_msg += f" - {e.response.text}"
+                logger.error("password_reset.email_failed", email=str(body.email), error=err_msg)
 
         if settings.environment == "development":
             # Return token directly in dev so the flow is testable without email
