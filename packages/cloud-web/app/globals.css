@@ -43,7 +43,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body {
-  background: var(--bg-base);
+  background: #0A0A0A;
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 15px;
@@ -86,8 +86,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; line-height
   white-space: nowrap; line-height: 1;
 }
 .btn svg { flex: none; }
-.btn-primary { background: var(--accent); color: var(--text-inverse); }
-.btn-primary:hover { background: var(--accent-hover); box-shadow: 0 6px 22px -10px rgba(245,245,245,.4); }
+.btn-primary { background: #F5F5F5; color: #0A0A0A; }
+.btn-primary:hover { background: #E0E0E0; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 .btn-ghost { background: transparent; color: var(--text-primary); border-color: var(--border-default); }
 .btn-ghost:hover { border-color: var(--border-strong); background: var(--bg-elevated); }
 .btn-subtle { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-default); }
@@ -465,7 +465,7 @@ select.select {
 }
 
 /* hero */
-.lp-hero { position: relative; padding: 168px 0 90px; overflow: hidden; }
+.lp-hero { position: relative; padding: 168px 0 90px; overflow: hidden; background: var(--bg-base); }
 .lp-hero-grid {
   position: absolute; inset: 0; z-index: 0;
   background-image: linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
@@ -473,16 +473,37 @@ select.select {
   mask-image: radial-gradient(ellipse 60% 55% at 50% 22%, #000, transparent 78%);
   -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 22%, #000, transparent 78%);
 }
+/* Inspector card — TRD-compliant border + allowed depth shadow */
+.lp-inspector-card {
+  border: 1px solid #2A2A2A !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+}
+
+/* Product Hunt button */
+.ph-button {
+  display: inline-block;
+  background: #111111;
+  border: 1px solid #3A3A3A;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  transition: border-color .15s;
+  line-height: 0;
+}
+.ph-button:hover {
+  border-color: #F5F5F5;
+}
 .lp-hero-inner { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
-.lp-h1 { font-size: clamp(38px, 5vw, 62px); font-weight: 600; line-height: 1.05; letter-spacing: -0.03em; }
-.lp-h1 .g { color: var(--text-tertiary); }
-.lp-sub { font-size: clamp(15px, 1.6vw, 18px); color: var(--text-secondary); line-height: 1.6; max-width: 480px; margin-top: 22px; }
+.lp-h1 { font-size: clamp(38px, 5vw, 62px); font-weight: 500; line-height: 1.05; letter-spacing: -0.03em; }
+.lp-h1 .g { color: #E8E3DB; }
+.lp-sub { font-size: clamp(14.5px, 1.5vw, 17px); color: var(--text-secondary); line-height: 1.6; max-width: 480px; margin-top: 22px; }
 .lp-hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
 .lp-trustline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 30px; font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
 .lp-trustline .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--border-strong); }
 
 /* install strip with copy */
-.lp-install { display: inline-flex; align-items: center; gap: 12px; margin-top: 26px; font-family: var(--font-mono); font-size: 13.5px; background: var(--mono-bg); border: 1px solid var(--border-default); border-radius: 10px; padding: 12px 14px; color: var(--mono-text); }
+.lp-install { display: inline-flex; align-items: center; gap: 12px; margin-top: 26px; font-family: var(--font-mono); font-size: 13.5px; background: var(--mono-bg); border: 1px solid var(--border-default); border-radius: 10px; padding: 12px 14px; color: var(--mono-text); transition: border-color .15s; }
+.lp-install:hover { border-color: var(--border-strong); }
 .lp-install .p { color: var(--text-tertiary); }
 .lp-install button { margin-left: 4px; background: none; border: none; color: var(--text-tertiary); cursor: pointer; display: grid; place-items: center; padding: 2px; border-radius: 5px; }
 .lp-install button:hover { color: var(--text-primary); }

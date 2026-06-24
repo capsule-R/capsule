@@ -151,7 +151,7 @@ function Inspector() {
   const pct = total === 1 ? 0 : (idx / (total - 1)) * 100;
 
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 14, overflow: 'hidden', width: '100%', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+    <div className="lp-inspector-card" style={{ background: 'var(--bg-card)', borderRadius: 14, overflow: 'hidden', width: '100%' }}>
       {/* chrome */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 15px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)' }}>checkout-agent · sess_8f2a91c4</span>
@@ -331,6 +331,23 @@ export default function LandingPage() {
               <a href="#how" className="btn btn-ghost btn-lg">See how it works</a>
             </div>
             <div className="reveal"><InstallStrip /></div>
+            <div className="reveal" style={{ marginTop: 20 }}>
+              <a
+                href="https://www.producthunt.com/products/capsule-17?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-capsule-17"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ph-button"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt="Capsule - The flight recorder for AI agents | Product Hunt"
+                  src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1178659&theme=dark&t=1782273810512"
+                  width={250}
+                  height={54}
+                  style={{ display: 'block', borderRadius: 9 }}
+                />
+              </a>
+            </div>
             <div className="lp-trustline reveal">
               <span>SOC 2 in progress</span><span className="dot" />
               <span>EU AI Act ready</span><span className="dot" />
