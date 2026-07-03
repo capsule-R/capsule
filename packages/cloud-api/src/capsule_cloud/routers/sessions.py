@@ -408,7 +408,7 @@ async def get_session(
 
 # ── Delete ────────────────────────────────────────────────────
 
-@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_session(
     workspace_id: str,
     session_id: str,
