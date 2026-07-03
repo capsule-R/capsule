@@ -109,6 +109,13 @@ class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
                 token_usage = response.llm_output.get("token_usage", {})
 
             cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
+            session.write_cassette(
+                cassette_id,
+                {
+                    "model": model_name,
+                    "raw_response": {"content": content, "token_usage": token_usage},
+                },
+            )
             payload = LLMCallPayload(
                 provider="langchain",
                 model=model_name,
@@ -171,6 +178,14 @@ class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
 
         try:
             cassette_id = f"tool-{uuid.uuid4().hex[:8]}"
+            session.write_cassette(
+                cassette_id,
+                {
+                    "tool_name": kwargs.get("name", "unknown_tool"),
+                    "arguments": {"input": kwargs.get("input", "")},
+                    "result": output,
+                },
+            )
             payload = ToolCallPayload(
                 tool_name=kwargs.get("name", "unknown_tool"),
                 arguments={"input": kwargs.get("input", "")},

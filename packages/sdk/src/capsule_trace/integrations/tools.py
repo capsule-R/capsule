@@ -13,6 +13,7 @@ Works with:
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import time
 import uuid
@@ -88,6 +89,16 @@ def capture_tool_call(
     return decorator
 
 
+def _to_json_safe(value: Any) -> Any:
+    """Best-effort conversion of an arbitrary tool argument/result to something
+    that survives a json.dumps round-trip in the storage backend."""
+    try:
+        json.dumps(value)
+        return value
+    except Exception:
+        return repr(value)
+
+
 def _emit_tool_event(
     session: Any,
     name: str,
@@ -100,6 +111,15 @@ def _emit_tool_event(
 ) -> None:
     try:
         cassette_id = f"tool-{uuid.uuid4().hex[:8]}"
+        session.write_cassette(
+            cassette_id,
+            {
+                "tool_name": name,
+                "arguments": {k: _to_json_safe(v) for k, v in arguments.items()},
+                "result": _to_json_safe(result),
+                "error": error,
+            },
+        )
         payload = ToolCallPayload(
             tool_name=name,
             tool_namespace=namespace,
@@ -146,6 +166,10 @@ def intercept_openai_tool_calls(response: Any, session: Any) -> None:
                     args_dict = {"_raw": args_str}
 
                 cassette_id = f"tool-{uuid.uuid4().hex[:8]}"
+                session.write_cassette(
+                    cassette_id,
+                    {"tool_name": tc.function.name, "arguments": args_dict},
+                )
                 payload = ToolCallPayload(
                     tool_name=tc.function.name,
                     arguments=args_dict,

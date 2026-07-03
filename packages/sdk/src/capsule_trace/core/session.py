@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import ulid
+from pydantic import BaseModel
 
 from capsule_trace.core.context import get_current_session as get_current_session
 from capsule_trace.core.context import set_current_session
@@ -81,6 +82,19 @@ class Session:
 
     def capture_event(self, event: Event) -> None:
         """Append an event to this session. Never raises — swallows all errors."""
+        if self._redact_patterns:
+            try:
+                event.payload = self._redact_payload(event.payload)
+            except Exception:
+                # A redaction failure must be loud: silently storing the
+                # unredacted payload would defeat the point of passing
+                # redact=[...] in the first place.
+                logger.warning(
+                    "capsule: failed to apply redact patterns %r to event payload "
+                    "— storing this event unredacted",
+                    self._redact_patterns,
+                    exc_info=True,
+                )
         try:
             self._events.append(event)
             self._step_counter += 1
@@ -89,8 +103,50 @@ class Session:
         except Exception:
             logger.debug("capsule: failed to capture event", exc_info=True)
 
+    def _redact_payload(self, payload: Any) -> Any:
+        """Mask any field whose key matches a configured redact pattern.
+
+        Patterns are matched case-insensitively as substrings against dict
+        keys, recursively through nested dicts/lists. A pydantic payload
+        model is converted to a plain dict first (Event.payload's type union
+        accepts dict[str, Any], so this round-trips cleanly through storage).
+        """
+        if isinstance(payload, BaseModel):
+            return self._redact_dict(payload.model_dump(mode="json"))
+        if isinstance(payload, dict):
+            return self._redact_dict(payload)
+        return payload
+
+    def _redact_dict(self, data: dict[str, Any]) -> dict[str, Any]:
+        redacted: dict[str, Any] = {}
+        for key, value in data.items():
+            if any(pattern.lower() in key.lower() for pattern in self._redact_patterns):
+                redacted[key] = "[REDACTED]"
+            elif isinstance(value, dict):
+                redacted[key] = self._redact_dict(value)
+            elif isinstance(value, list):
+                redacted[key] = [
+                    self._redact_dict(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+            else:
+                redacted[key] = value
+        return redacted
+
     def next_step_index(self) -> int:
         return self._step_counter
+
+    def write_cassette(self, cassette_id: str, data: dict[str, Any]) -> None:
+        """Persist a recorded response/result for later deterministic replay.
+
+        Integrations call this at capture time, before setting an event
+        payload's ``cassette_ref`` — otherwise the ref is dangling and replay
+        has nothing to serve. Never raises.
+        """
+        try:
+            self._storage.write_cassette(cassette_id, {**data, "session_id": self.session_id})
+        except Exception:
+            logger.debug("capsule: failed to write cassette", exc_info=True)
 
     # ── Finalisation ──────────────────────────────────────────
 

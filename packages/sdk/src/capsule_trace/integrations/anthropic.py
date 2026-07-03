@@ -54,12 +54,13 @@ def _patch_sync_client(anthropic: Any) -> None:
         try:
             response = original(self, **kwargs)
             duration = (time.perf_counter() - start) * 1000
-            payload = _complete_payload(payload, response, duration)
+            payload = _complete_payload(payload, response, duration, session, kwargs)
             _emit_event(session, payload, duration)
             return response
         except Exception as exc:
             duration = (time.perf_counter() - start) * 1000
             payload.error = str(exc)
+            _write_error_cassette(session, payload, exc, kwargs)
             _emit_event(session, payload, duration)
             raise
 
@@ -80,12 +81,13 @@ def _patch_async_client(anthropic: Any) -> None:
         try:
             response = await original(self, **kwargs)
             duration = (time.perf_counter() - start) * 1000
-            payload = _complete_payload(payload, response, duration)
+            payload = _complete_payload(payload, response, duration, session, kwargs)
             _emit_event(session, payload, duration)
             return response
         except Exception as exc:
             duration = (time.perf_counter() - start) * 1000
             payload.error = str(exc)
+            _write_error_cassette(session, payload, exc, kwargs)
             _emit_event(session, payload, duration)
             raise
 
@@ -110,7 +112,13 @@ def _build_request_payload(kwargs: dict[str, Any]) -> LLMCallPayload:
     )
 
 
-def _complete_payload(payload: LLMCallPayload, response: Any, duration_ms: float) -> LLMCallPayload:
+def _complete_payload(
+    payload: LLMCallPayload,
+    response: Any,
+    duration_ms: float,
+    session: Any = None,
+    request_kwargs: dict[str, Any] | None = None,
+) -> LLMCallPayload:
     try:
         content_text: str | None = None
         tool_calls: list[Any] = []
@@ -141,11 +149,51 @@ def _complete_payload(payload: LLMCallPayload, response: Any, duration_ms: float
         )
 
         cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
+        if session is not None:
+            session.write_cassette(
+                cassette_id,
+                {
+                    "request": request_kwargs or {},
+                    "raw_response": _to_raw_dict(response),
+                    "model": payload.model,
+                },
+            )
         payload.cassette_ref = f"cassettes/{cassette_id}.json"
     except Exception:
         logger.debug("capsule: failed to extract Anthropic response", exc_info=True)
 
     return payload
+
+
+def _to_raw_dict(response: Any) -> Any:
+    """Best-effort serialization of an Anthropic SDK response to a plain dict."""
+    if hasattr(response, "model_dump"):
+        try:
+            return response.model_dump(mode="json")
+        except Exception:
+            pass
+    try:
+        return dict(response)
+    except Exception:
+        return {"repr": repr(response)}
+
+
+def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception, request_kwargs: dict[str, Any]) -> None:
+    """Record a failed call so replay can reproduce the failure, not just successes."""
+    try:
+        cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
+        session.write_cassette(
+            cassette_id,
+            {
+                "request": request_kwargs,
+                "error": str(exc),
+                "exception_type": type(exc).__name__,
+                "model": payload.model,
+            },
+        )
+        payload.cassette_ref = f"cassettes/{cassette_id}.json"
+    except Exception:
+        logger.debug("capsule: failed to write error cassette", exc_info=True)
 
 
 def _emit_event(session: Any, payload: LLMCallPayload, duration_ms: float) -> None:

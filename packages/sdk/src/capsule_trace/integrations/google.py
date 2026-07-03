@@ -67,6 +67,14 @@ def _patch_generate_content(genai: Any) -> None:
                     else None,
                 )
                 cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
+                session.write_cassette(
+                    cassette_id,
+                    {
+                        "request": {"contents": str(contents), **kwargs},
+                        "raw_response": _to_raw_dict(response),
+                        "model": payload.model,
+                    },
+                )
                 payload.cassette_ref = f"cassettes/{cassette_id}.json"
             except Exception:
                 pass
@@ -75,10 +83,49 @@ def _patch_generate_content(genai: Any) -> None:
         except Exception as exc:
             duration = (time.perf_counter() - start) * 1000
             payload.error = str(exc)
+            _write_error_cassette(session, payload, exc, contents, kwargs)
             _emit_event(session, payload, duration)
             raise
 
     genai.GenerativeModel.generate_content = patched
+
+
+def _to_raw_dict(response: Any) -> Any:
+    """Best-effort serialization of a Google Generative AI response to a plain dict."""
+    if hasattr(response, "to_dict"):
+        try:
+            return response.to_dict()
+        except Exception:
+            pass
+    try:
+        return {
+            "text": response.text,
+            "candidates": [
+                {"finish_reason": str(c.finish_reason)} for c in (response.candidates or [])
+            ],
+        }
+    except Exception:
+        return {"repr": repr(response)}
+
+
+def _write_error_cassette(
+    session: Any, payload: LLMCallPayload, exc: Exception, contents: Any, kwargs: dict[str, Any]
+) -> None:
+    """Record a failed call so replay can reproduce the failure, not just successes."""
+    try:
+        cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
+        session.write_cassette(
+            cassette_id,
+            {
+                "request": {"contents": str(contents), **kwargs},
+                "error": str(exc),
+                "exception_type": type(exc).__name__,
+                "model": payload.model,
+            },
+        )
+        payload.cassette_ref = f"cassettes/{cassette_id}.json"
+    except Exception:
+        logger.debug("capsule: failed to write error cassette", exc_info=True)
 
 
 def _emit_event(session: Any, payload: LLMCallPayload, duration_ms: float) -> None:
