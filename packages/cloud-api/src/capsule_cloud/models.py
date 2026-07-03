@@ -131,6 +131,27 @@ class ApiKey(Base):
     workspace = relationship("Workspace", back_populates="api_keys")
 
 
+class Replay(Base):
+    """A replay job, persisted so its status/result survive process restarts
+    and are visible across all API replicas — previously this was an
+    in-process dict (REPLAY_JOBS) that also fabricated an "is_deterministic:
+    True" verdict from elapsed wall-clock time instead of a real result."""
+
+    __tablename__ = "replays"
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("cloud_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    mode = Column(String, nullable=False, default="cassette")
+    branch_from_step = Column(Integer)
+    status = Column(String, nullable=False, default="queued")  # queued|running|completed|error
+    result_json = Column(Text)   # set once a real result is known
+    error_message = Column(Text)
+    created_by_id = Column(String, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

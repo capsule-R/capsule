@@ -116,7 +116,7 @@ async def update_workspace(
     return workspace
 
 
-@router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
@@ -203,6 +203,7 @@ async def invite_member(
 @router.delete(
     "/{workspace_id}/members/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 async def remove_member(
     workspace_id: str,
