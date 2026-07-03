@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event,
 )
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -87,6 +88,28 @@ class SQLiteBackend:
             f"sqlite:///{db_path}",
             connect_args={"check_same_thread": False},
         )
+
+        @event.listens_for(self._engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection: Any, _connection_record: Any) -> None:
+            # WAL lets readers and a writer proceed concurrently instead of
+            # blocking on SQLite's default exclusive-lock behavior; the
+            # busy_timeout makes a writer that DOES have to wait retry for
+            # up to 5s instead of raising "database is locked" immediately.
+            # Without both, concurrent Sessions sharing a db_path silently
+            # lose events: write_event()'s OperationalError is swallowed by
+            # capture_event()'s catch-all.
+            #
+            # busy_timeout MUST be set first: before WAL is active (e.g. the
+            # very first connection racing another thread's schema-creation
+            # DDL, which still exclusive-locks under the default
+            # rollback-journal mode), the journal_mode statement itself can
+            # hit "database is locked" — busy_timeout makes that retry
+            # instead of failing immediately.
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.close()
+
         _Base.metadata.create_all(self._engine)
         self._Session = sessionmaker(bind=self._engine)
 
@@ -94,6 +117,11 @@ class SQLiteBackend:
     def default(cls) -> SQLiteBackend:
         default_path = Path.home() / ".capsule" / "sessions.db"
         return cls(default_path)
+
+    def dispose(self) -> None:
+        """Release pooled connections. Safe to call even if this backend is
+        reused afterward — SQLAlchemy reconnects lazily on next use."""
+        self._engine.dispose()
 
     # ── Write ────────────────────────────────────────────────
 

@@ -18,10 +18,14 @@ from capsule_trace.core.models import (
     CapsuleIntegrity,
     CapsuleManifest,
     CapsuleProducer,
+    SessionMetadata,
+    SessionStatus,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from capsule_trace.core.models import Event
 
 try:
     from capsule_trace import __version__ as _SDK_VERSION  # noqa: N812
@@ -40,6 +44,25 @@ def _json_bytes(obj: Any) -> bytes:
     return json.dumps(obj, indent=2, default=str).encode("utf-8")
 
 
+def _reconstruct_minimal_metadata(session_id: str, events: list[Event]) -> SessionMetadata:
+    """Build a minimal SessionMetadata from events alone, for a session
+    whose own row is missing. Status is CANCELLED since we genuinely don't
+    know how (or if) the run finished — that's more honest than guessing
+    SUCCESS."""
+    timestamps = [e.timestamp for e in events]
+    started_at = min(timestamps)
+    ended_at = max(timestamps)
+    return SessionMetadata(
+        session_id=session_id,
+        agent_name="unknown",
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_ms=(ended_at - started_at).total_seconds() * 1000,
+        status=SessionStatus.CANCELLED,
+        step_count=len(events),
+    )
+
+
 def export_capsule(
     session_id: str,
     storage: Any,
@@ -47,8 +70,17 @@ def export_capsule(
     encryption_key: bytes | None = None,
 ) -> Path:
     """Build a .capsule archive from a stored session and write it to output_path."""
-    session_meta = storage.read_session_metadata(session_id)
     events = storage.read_events(session_id)
+    try:
+        session_meta = storage.read_session_metadata(session_id)
+    except KeyError:
+        # The session row is missing but its events survived (e.g. a crash
+        # before the row could be written, or capture without ever using
+        # the Session context manager). Reconstruct a minimal record rather
+        # than losing the data entirely.
+        if not events:
+            raise
+        session_meta = _reconstruct_minimal_metadata(session_id, events)
     cassettes = storage.read_cassettes(session_id)
     snapshots = storage.read_snapshots(session_id)
 

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import traceback
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ulid
 from pydantic import BaseModel
@@ -20,7 +21,33 @@ from capsule_trace.core.models import (
     SessionStatus,
 )
 
+if TYPE_CHECKING:
+    from concurrent.futures import Executor
+
 logger = logging.getLogger("capsule")
+
+# A session that ran for at least this long but captured zero events is
+# almost certainly a thread-context-loss bug (see Session.wrap_executor),
+# not a genuinely empty run — warn loudly rather than stay silent.
+_ZERO_EVENTS_WARNING_THRESHOLD_MS = 50.0
+
+# Sessions that have been __enter__()-ed but not yet finalize()-d. The
+# atexit hook below finalizes any that remain when the process exits
+# normally without going through __exit__ (e.g. no `with` block, or an
+# early sys.exit()) — it cannot help with a SIGKILL, which is instead
+# covered by writing the session row immediately on __enter__ (see below).
+_open_sessions: set[Session] = set()
+
+
+def _finalize_open_sessions_at_exit() -> None:
+    for session in list(_open_sessions):
+        try:
+            session.finalize(status=SessionStatus.CANCELLED)
+        except Exception:
+            logger.debug("capsule: failed to finalize open session at exit", exc_info=True)
+
+
+atexit.register(_finalize_open_sessions_at_exit)
 
 
 class Session:
@@ -50,6 +77,11 @@ class Session:
         self._step_counter = 0
         self._redact_patterns = redact or []
         self._auto_upload = auto_upload
+        # Only dispose the backend at finalize if this Session created it
+        # itself — an explicitly-passed (likely shared) backend's lifecycle
+        # belongs to the caller, and disposing it here could interrupt a
+        # sibling Session that's still actively writing through it.
+        self._owns_storage = storage_backend is None
         self._storage = storage_backend or SQLiteBackend.default()
         self._previous_session: Session | None = None
 
@@ -58,6 +90,17 @@ class Session:
     def __enter__(self) -> Session:
         self._previous_session = get_current_session()
         set_current_session(self)
+        _open_sessions.add(self)
+        try:
+            # Write the session row immediately, while status is still
+            # in_progress — otherwise a crashed run (SIGKILL, OOM-kill) has
+            # events with no session row to attach to: not listable, and
+            # export raises KeyError despite the data existing.
+            # finalize_session() upserts, so the later real finalize() call
+            # updates this same row rather than inserting a second one.
+            self._storage.finalize_session(self._metadata)
+        except Exception:
+            logger.debug("capsule: failed to write initial session record", exc_info=True)
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -136,6 +179,20 @@ class Session:
     def next_step_index(self) -> int:
         return self._step_counter
 
+    def wrap_executor(self, executor: Executor) -> Executor:
+        """Wrap an Executor so tasks submitted to it run with this session
+        active. ThreadPoolExecutor does not propagate ContextVars to its
+        worker threads by default, so tool calls run inside one silently
+        capture nothing without this. Usage::
+
+            with Session(agent_name="my-agent") as s:
+                with s.wrap_executor(ThreadPoolExecutor(max_workers=4)) as pool:
+                    futures = [pool.submit(call_tool, arg) for arg in args]
+        """
+        from capsule_trace.core.context import wrap_executor as _wrap_executor
+
+        return _wrap_executor(executor)
+
     def write_cassette(self, cassette_id: str, data: dict[str, Any]) -> None:
         """Persist a recorded response/result for later deterministic replay.
 
@@ -169,10 +226,30 @@ class Session:
                     stack_trace=traceback.format_exc(),
                 )
 
+            if (
+                self._step_counter == 0
+                and self._metadata.duration_ms > _ZERO_EVENTS_WARNING_THRESHOLD_MS
+            ):
+                logger.warning(
+                    "capsule: session %s ran for %.0fms but captured zero events — if it "
+                    "spawned threads (e.g. ThreadPoolExecutor), Capsule's session context "
+                    "is not inherited by new threads automatically; see Session.wrap_executor()",
+                    self.session_id,
+                    self._metadata.duration_ms,
+                )
+
+            # Updates the row written in __enter__() rather than inserting a
+            # second one — finalize_session() upserts by session_id.
             self._storage.finalize_session(self._metadata)
+            _open_sessions.discard(self)
 
             if self._auto_upload:
                 self._try_upload()
+
+            if self._owns_storage:
+                dispose = getattr(self._storage, "dispose", None)
+                if callable(dispose):
+                    dispose()
         except Exception:
             logger.debug("capsule: failed to finalize session", exc_info=True)
 

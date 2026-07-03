@@ -283,3 +283,251 @@ def test_redact_failure_logs_warning_and_still_stores_event(in_memory_backend, c
     assert any("redact" in rec.message.lower() for rec in caplog.records)
     events = in_memory_backend.read_events(session_id)
     assert len(events) == 1
+
+
+# ── Thread context propagation (P1) ──────────────────────────
+
+
+def test_wrap_executor_propagates_session_to_threads(in_memory_backend):
+    """P1: ThreadPoolExecutor doesn't inherit ContextVars by default — the
+    most common agent pattern (parallel tool calls) used to silently record
+    zero events. wrap_executor() must fix that."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from capsule_trace.core.context import get_current_session
+    from capsule_trace.core.models import Event
+
+    def _record_from_thread(i: int) -> str:
+        session = get_current_session()
+        assert session is not None, "thread did not inherit the active session"
+        event = Event(
+            session_id=session.session_id,
+            step_index=session.next_step_index(),
+            event_type=EventType.TOOL_CALL,
+            payload={"tool_name": f"thread-{i}", "arguments": {}},
+        )
+        session.capture_event(event)
+        return f"done-{i}"
+
+    with Session(agent_name="thread-test", storage_backend=in_memory_backend) as s:
+        session_id = s.session_id
+        with s.wrap_executor(ThreadPoolExecutor(max_workers=3)) as pool:
+            results = list(pool.map(_record_from_thread, range(3)))
+
+    assert sorted(results) == ["done-0", "done-1", "done-2"]
+    events = in_memory_backend.read_events(session_id)
+    assert len(events) == 3
+    tool_names = {
+        (e.payload if isinstance(e.payload, dict) else e.payload.model_dump())["tool_name"]
+        for e in events
+    }
+    assert tool_names == {"thread-0", "thread-1", "thread-2"}
+
+
+def test_unwrapped_executor_loses_thread_events(in_memory_backend):
+    """Sanity check for the bug wrap_executor fixes: without it, a thread
+    genuinely sees no active session."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from capsule_trace.core.context import get_current_session
+
+    with (
+        Session(agent_name="unwrapped-thread-test", storage_backend=in_memory_backend),
+        ThreadPoolExecutor(max_workers=1) as pool,
+    ):
+        seen = pool.submit(get_current_session).result()
+
+    assert seen is None
+
+
+def test_finalize_warns_on_zero_events_after_meaningful_duration(in_memory_backend, caplog):
+    import logging
+    import time
+
+    with (
+        caplog.at_level(logging.WARNING, logger="capsule"),
+        Session(agent_name="silent-thread-loss", storage_backend=in_memory_backend),
+    ):
+        time.sleep(0.06)  # exceed _ZERO_EVENTS_WARNING_THRESHOLD_MS (50ms)
+
+    assert any("zero events" in rec.message for rec in caplog.records)
+
+
+def test_finalize_does_not_warn_for_genuinely_trivial_session(in_memory_backend, caplog):
+    import logging
+
+    with (
+        caplog.at_level(logging.WARNING, logger="capsule"),
+        Session(agent_name="trivial", storage_backend=in_memory_backend),
+    ):
+        pass  # near-instant, zero events — not suspicious
+
+    assert not any("zero events" in rec.message for rec in caplog.records)
+
+
+# ── SQLite concurrency (P1) ───────────────────────────────────
+
+
+def test_sqlite_backend_sets_wal_and_busy_timeout(tmp_path):
+    """P1 regression guard: without these PRAGMAs, a concurrent writer can
+    hit "database is locked" immediately, which capture_event()'s catch-all
+    swallows — silent event loss. This is the deterministic check; the
+    ThreadPoolExecutor test below exercises the real end-to-end path but
+    (like most lock-contention bugs) isn't guaranteed to reproduce the race
+    on every machine."""
+    from sqlalchemy import text
+
+    backend = SQLiteBackend(tmp_path / "pragma-check.db")
+    with backend._Session() as db:
+        journal_mode = db.execute(text("PRAGMA journal_mode")).scalar()
+        busy_timeout = db.execute(text("PRAGMA busy_timeout")).scalar()
+
+    assert journal_mode == "wal"
+    assert busy_timeout == 5000
+
+
+def test_concurrent_sessions_writing_events_lose_nothing(tmp_path):
+    """P1: without WAL + busy_timeout, concurrent writers to the same
+    SQLite file raise "database is locked", which capture_event() swallows
+    — events vanish silently. All 5 sessions' events must survive.
+
+    The backend is created once up front (schema + WAL setup happens a
+    single time, same as check_same_thread=False is designed for: one
+    engine/connection pool shared across threads) — five sessions then
+    write through it concurrently.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from capsule_trace.core.models import Event
+
+    backend = SQLiteBackend(tmp_path / "concurrent.db")
+
+    def _run_session(i: int) -> str:
+        with Session(agent_name=f"concurrent-{i}", storage_backend=backend) as s:
+            for step in range(10):
+                event = Event(
+                    session_id=s.session_id,
+                    step_index=s.next_step_index(),
+                    event_type=EventType.TOOL_CALL,
+                    payload={"tool_name": f"step-{step}", "arguments": {}},
+                )
+                s.capture_event(event)
+            return s.session_id
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        session_ids = list(pool.map(_run_session, range(5)))
+
+    assert len(set(session_ids)) == 5
+    for session_id in session_ids:
+        events = backend.read_events(session_id)
+        assert len(events) == 10, f"session {session_id} lost events under concurrency"
+
+
+# ── Crash recovery (P1) ───────────────────────────────────────
+
+
+def test_session_row_exists_immediately_after_enter(in_memory_backend):
+    """Even before any events are captured or finalize() runs, the session
+    must already be listable — this is what makes a hard-killed run
+    (SIGKILL, OOM-kill; atexit cannot help with those) still recoverable."""
+    s = Session(agent_name="crash-test", storage_backend=in_memory_backend)
+    s.__enter__()
+    try:
+        meta = in_memory_backend.read_session_metadata(s.session_id)
+        assert meta.status == SessionStatus.IN_PROGRESS
+    finally:
+        s.finalize(status=SessionStatus.CANCELLED)
+
+
+def test_atexit_hook_finalizes_sessions_never_exited(in_memory_backend):
+    """Simulates a crash: __enter__() runs, __exit__() never does (the
+    scenario a SIGKILL or an unexpected os._exit() produces). The atexit
+    hook — called directly here rather than by an actual process exit —
+    must finalize it so it's listable instead of stuck in_progress forever."""
+    from capsule_trace.core.models import Event
+    from capsule_trace.core.session import _finalize_open_sessions_at_exit, _open_sessions
+
+    s = Session(agent_name="crashed-agent", storage_backend=in_memory_backend)
+    s.__enter__()
+    session_id = s.session_id
+
+    event = Event(
+        session_id=session_id,
+        step_index=s.next_step_index(),
+        event_type=EventType.TOOL_CALL,
+        payload={"tool_name": "did_some_work", "arguments": {}},
+    )
+    s.capture_event(event)
+
+    assert s in _open_sessions
+
+    # __exit__ deliberately never called — simulate the process exiting
+    # without it by invoking the atexit hook directly.
+    _finalize_open_sessions_at_exit()
+
+    assert s not in _open_sessions
+    meta = in_memory_backend.read_session_metadata(session_id)
+    assert meta.status == SessionStatus.CANCELLED
+
+    listed_ids = [m.session_id for m in in_memory_backend.list_sessions()]
+    assert session_id in listed_ids
+
+
+def test_crashed_session_is_exportable(tmp_path):
+    """Full round-trip: crash before __exit__, atexit-recover, export."""
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.core.models import Event
+    from capsule_trace.core.session import _finalize_open_sessions_at_exit
+
+    backend = SQLiteBackend(tmp_path / "crash.db")
+    s = Session(agent_name="crashed-and-exported", storage_backend=backend)
+    s.__enter__()
+    session_id = s.session_id
+    s.capture_event(
+        Event(
+            session_id=session_id,
+            step_index=s.next_step_index(),
+            event_type=EventType.TOOL_CALL,
+            payload={"tool_name": "work", "arguments": {}},
+        )
+    )
+
+    _finalize_open_sessions_at_exit()
+
+    out_path = tmp_path / "crashed.capsule"
+    result = export_capsule(session_id, backend, out_path)
+    assert result.exists()
+    assert result.stat().st_size > 0
+
+
+def test_export_reconstructs_metadata_when_session_row_missing(tmp_path):
+    """Events captured without ever using the Session context manager (no
+    __enter__, so no row is written) must still be exportable instead of
+    raising KeyError."""
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.core.models import Event
+
+    backend = SQLiteBackend(tmp_path / "no_row.db")
+    session_id = "orphaned-session"
+    backend.write_event(
+        Event(
+            session_id=session_id,
+            step_index=0,
+            event_type=EventType.TOOL_CALL,
+            payload={"tool_name": "orphan_work", "arguments": {}},
+        )
+    )
+
+    out_path = tmp_path / "orphaned.capsule"
+    result = export_capsule(session_id, backend, out_path)
+    assert result.exists()
+
+
+def test_export_still_raises_when_both_session_and_events_missing(tmp_path):
+    """The KeyError fallback only applies when there's something to
+    reconstruct from — a genuinely nonexistent session must still raise."""
+    from capsule_trace.core.exporter import export_capsule
+
+    backend = SQLiteBackend(tmp_path / "empty.db")
+    with pytest.raises(KeyError):
+        export_capsule("never-existed", backend, tmp_path / "out.capsule")
