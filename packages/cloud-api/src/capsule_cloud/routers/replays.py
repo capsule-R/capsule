@@ -1,94 +1,52 @@
 """Replay job status endpoints.
 
-Replay jobs are not yet persisted in the database. This module keeps an
-in-process registry (populated by the ``trigger_replay`` endpoint in
-``sessions.py``) and simulates the job lifecycle from elapsed wall-clock
-time. This is an accepted stub until real replay-worker persistence lands.
+Replay jobs are persisted in the ``replays`` table (see models.Replay) so
+their status/result survive process restarts and are visible across every
+API replica. Local (in-process) replays write their real result at trigger
+time; Modal-queued replays are updated in place once the worker finishes
+(see replay_worker.py's _write_result). This endpoint never fabricates a
+verdict — a job whose worker hasn't reported back yet stays "queued".
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from capsule_cloud.auth import get_current_user
-from capsule_cloud.models import User
+from capsule_cloud.auth import get_current_user, get_workspace_member
+from capsule_cloud.database import get_db
+from capsule_cloud.models import Replay, User
 from capsule_cloud.schemas import ReplayStatusResponse
 
 router = APIRouter(prefix="/replays", tags=["replays"])
-
-# In-process replay job registry, keyed by replay_id. Each value holds:
-#   {created_at: datetime, session_id: str, step_count: int,
-#    error: str | None, initial_status: str}
-REPLAY_JOBS: dict[str, dict] = {}
-
-# Simulated lifecycle windows (seconds since job creation).
-_QUEUED_WINDOW_SECONDS = 2.0
-_RUNNING_WINDOW_SECONDS = 6.0
 
 
 @router.get("/{replay_id}", response_model=ReplayStatusResponse)
 async def get_replay_status(
     replay_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ReplayStatusResponse:
-    """Return the status of a previously-triggered replay job.
-
-    Status progresses ``queued`` -> ``running`` -> ``completed`` based on the
-    time elapsed since the job was registered. Jobs whose Modal spawn failed
-    at trigger time report ``failed`` immediately.
-    """
-    job = REPLAY_JOBS.get(replay_id)
-    if job is None:
+    """Return the real, persisted status of a previously-triggered replay job."""
+    result = await db.execute(select(Replay).where(Replay.id == replay_id))
+    replay = result.scalars().first()
+    if replay is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Replay not found"
         )
 
-    initial_status = job.get("initial_status")
+    # IDOR fix: previously any authenticated user could poll any replay_id
+    # and see another tenant's session id, step counts, and replay stdout.
+    await get_workspace_member(replay.workspace_id, current_user, db)
 
-    if initial_status == "error":
-        return ReplayStatusResponse(
-            replay_id=replay_id,
-            status="failed",
-            result=None,
-            error=job.get("error") or "Replay worker failed to start",
-        )
+    result_dict = json.loads(replay.result_json) if replay.result_json else None
 
-    if initial_status == "completed":
-        step_count = int(job.get("step_count") or 0)
-        result = job.get("replay_result") or {
-            "is_deterministic": True,
-            "replayed_steps": step_count,
-            "original_steps": step_count,
-        }
-        return ReplayStatusResponse(
-            replay_id=replay_id,
-            status="completed",
-            result=result,
-            error=None,
-        )
-
-    # Modal-queued job: simulate lifecycle via elapsed time until real
-    # worker persistence is in place.
-    elapsed = (datetime.now(timezone.utc) - job["created_at"]).total_seconds()
-    if elapsed < _QUEUED_WINDOW_SECONDS:
-        return ReplayStatusResponse(
-            replay_id=replay_id, status="queued", result=None, error=None
-        )
-    if elapsed < _RUNNING_WINDOW_SECONDS:
-        return ReplayStatusResponse(
-            replay_id=replay_id, status="running", result=None, error=None
-        )
-
-    step_count = int(job.get("step_count") or 0)
     return ReplayStatusResponse(
-        replay_id=replay_id,
-        status="completed",
-        result={
-            "is_deterministic": True,
-            "replayed_steps": step_count,
-            "original_steps": step_count,
-        },
-        error=None,
+        replay_id=replay.id,
+        status=replay.status,
+        result=result_dict,
+        error=replay.error_message,
     )

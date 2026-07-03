@@ -186,7 +186,7 @@ class ReplayStatusResponse(BaseModel):
     """Polled status of a previously-triggered replay job."""
 
     replay_id: str
-    status: str  # queued | running | completed | failed
+    status: str  # queued | running | completed | error
     result: dict | None = None
     error: str | None = None
 

@@ -20,7 +20,7 @@ from capsule_cloud.auth import get_current_user, get_workspace_member
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud import storage as _storage
-from capsule_cloud.models import Session as CloudSession, User, Workspace
+from capsule_cloud.models import Replay, Session as CloudSession, User, Workspace
 from capsule_cloud.schemas import (
     BranchCreateRequest,
     BranchCreateResponse,
@@ -545,9 +545,13 @@ async def _local_replay(
         tmp_path = f.name
 
     try:
-        cmd = ["capsule", "replay", tmp_path, f"--mode={body.mode}"]
-        if body.branch_from_step is not None:
-            cmd += [f"--branch-from={body.branch_from_step}"]
+        # NOTE: the CLI's "replay" command has no --branch-from option today
+        # (branching from a step is not yet implemented there), so
+        # body.branch_from_step is accepted for forward-compatibility but not
+        # currently forwarded to the subprocess.
+        # --json is required: without it we'd have no way to know the real
+        # is_deterministic/integrity_ok verdict, only the process exit code.
+        cmd = ["capsule-trace", "replay", tmp_path, f"--mode={body.mode}", "--json"]
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -561,18 +565,26 @@ async def _local_replay(
             await proc.communicate()
             return "error", "Local replay timed out after 120 seconds", None
 
-        stdout = stdout_b.decode(errors="replace")[-4000:]
+        stdout = stdout_b.decode(errors="replace")
         stderr = stderr_b.decode(errors="replace")[-2000:]
 
-        if proc.returncode == 0:
-            step_count = session.step_count or 0
-            return "completed", None, {
-                "is_deterministic": True,
-                "replayed_steps": step_count,
-                "original_steps": step_count,
-                "stdout": stdout,
-            }
-        return "error", stderr or f"capsule replay exited with code {proc.returncode}", None
+        if proc.returncode != 0:
+            return "error", stderr or f"capsule replay exited with code {proc.returncode}", None
+
+        # Parse the CLI's real verdict — never assume determinism from a
+        # zero exit code alone (the process can exit 0 having found a
+        # mismatch; it doesn't fail the process, it reports it in the JSON).
+        try:
+            parsed = json.loads(stdout)
+        except (json.JSONDecodeError, ValueError) as exc:
+            return "error", f"Could not parse replay output as JSON: {exc}", None
+
+        return "completed", None, {
+            "is_deterministic": parsed.get("is_deterministic"),
+            "integrity_ok": parsed.get("integrity_ok"),
+            "replayed_steps": parsed.get("replayed_steps"),
+            "original_steps": parsed.get("original_steps"),
+        }
     except FileNotFoundError:
         return "error", "capsule CLI not found — install capsule-sdk in the API server environment", None
     except Exception as exc:
@@ -616,6 +628,7 @@ async def trigger_replay(
 
             run_replay = modal.Function.from_name("capsule-replay", "run_replay")
             await run_replay.spawn.aio(
+                replay_id=replay_id,
                 storage_path=session.storage_path,
                 mode=body.mode,
                 branch_from_step=body.branch_from_step,
@@ -623,6 +636,11 @@ async def trigger_replay(
                 storage_access_key=settings.storage_access_key,
                 storage_secret_key=settings.storage_secret_key,
                 storage_bucket=settings.storage_bucket,
+                # The worker connects back to write its real result once
+                # finished — see replay_worker.py's _write_result. Without
+                # this the API would have no way to learn the outcome of a
+                # fire-and-forget Modal spawn.
+                database_url=settings.database_url,
             )
             replay_status = "queued"
         except Exception as exc:
@@ -640,17 +658,23 @@ async def trigger_replay(
                 "Configure MODAL_TOKEN_ID and MODAL_TOKEN_SECRET for cloud replay."
             )
 
-    # Register the job so GET /replays/{replay_id} can report its status.
-    from capsule_cloud.routers.replays import REPLAY_JOBS
-
-    REPLAY_JOBS[replay_id] = {
-        "created_at": datetime.now(timezone.utc),
-        "session_id": session_id,
-        "step_count": session.step_count or 0,
-        "error": replay_error,
-        "initial_status": replay_status,
-        "replay_result": replay_result,
-    }
+    # Persist the job so GET /replays/{replay_id} reports a real status —
+    # previously this lived only in an in-process dict and fabricated an
+    # "is_deterministic: True" verdict from elapsed wall-clock time once the
+    # Modal job was presumed done.
+    replay_row = Replay(
+        id=replay_id,
+        session_id=session_id,
+        workspace_id=workspace_id,
+        mode=body.mode,
+        branch_from_step=body.branch_from_step,
+        status=replay_status,
+        result_json=json.dumps(replay_result) if replay_result is not None else None,
+        error_message=replay_error,
+        created_by_id=current_user.id,
+    )
+    db.add(replay_row)
+    await db.commit()
 
     return ReplayResponse(
         id=replay_id,
@@ -658,7 +682,7 @@ async def trigger_replay(
         status=replay_status,
         replay_mode=body.mode,
         branch_from_step=body.branch_from_step,
-        created_at=datetime.now(timezone.utc),
+        created_at=replay_row.created_at,
     )
 
 
