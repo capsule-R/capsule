@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from capsule_cloud.auth import _create_token
+
 
 class TestSignup:
     async def test_signup_success(self, client):
@@ -126,7 +130,7 @@ class TestLogout:
 
 
 class TestForgotPassword:
-    async def test_forgot_password_existing_user_returns_token_in_dev(self, client):
+    async def test_forgot_password_existing_user_never_echoes_token(self, client):
         await client.post(
             "/api/v1/auth/signup",
             json={"email": "forgot@example.com", "password": "supersecretpassword1"},
@@ -137,8 +141,11 @@ class TestForgotPassword:
         )
         assert resp.status_code == 200
         data = resp.json()
-        # Dev mode: reset_token returned directly so the flow is testable without email
-        assert "reset_token" in data
+        # P0-1: the token must never be echoed in the HTTP response, in any
+        # environment — a forgotten ENVIRONMENT setting in production must not
+        # turn this endpoint into an unauthenticated account-takeover primitive.
+        assert "reset_token" not in data
+        assert set(data.keys()) == {"message"}
 
     async def test_forgot_password_nonexistent_user(self, client):
         resp = await client.post(
@@ -149,15 +156,78 @@ class TestForgotPassword:
         # Must not leak whether the account exists
         assert "reset_token" not in resp.json()
 
+    async def test_forgot_password_existing_and_nonexistent_responses_are_identical(
+        self, client
+    ):
+        """The response body must be indistinguishable regardless of account
+        existence — otherwise the endpoint is a user-enumeration oracle."""
+        await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "enum-check@example.com", "password": "supersecretpassword1"},
+        )
+        resp_existing = await client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "enum-check@example.com"},
+        )
+        resp_missing = await client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "definitely-not-registered@example.com"},
+        )
+        assert resp_existing.status_code == resp_missing.status_code == 200
+        assert resp_existing.json() == resp_missing.json()
+
+    async def test_forgot_password_rejects_settings_without_environment(self):
+        """P0-1: Settings() must fail to construct if ENVIRONMENT is unset —
+        the old default of "development" was a fail-open trap."""
+        import os
+
+        import pytest
+
+        from capsule_cloud.config import Settings
+
+        old = os.environ.pop("ENVIRONMENT", None)
+        try:
+            with pytest.raises(Exception):
+                Settings(_env_file=None)
+        finally:
+            if old is not None:
+                os.environ["ENVIRONMENT"] = old
+
+    async def test_forgot_password_rejects_invalid_environment_value(self):
+        from capsule_cloud.config import Settings
+
+        try:
+            Settings(environment="dev", _env_file=None)
+            raised = False
+        except Exception:
+            raised = True
+        assert raised, "an unrecognized ENVIRONMENT value must be rejected"
+
 
 class TestResetPassword:
     async def _register_and_get_token(self, client, email="resetme@example.com"):
-        await client.post(
+        signup_resp = await client.post(
             "/api/v1/auth/signup",
             json={"email": email, "password": "supersecretpassword1"},
         )
+        access_token = signup_resp.json()["access_token"]
+        me_resp = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_id = me_resp.json()["id"]
+
+        # forgot-password no longer returns the token (P0-1) — mint an
+        # equivalent one the same way the endpoint does internally, to
+        # exercise the reset-password flow end to end.
+        token = _create_token(
+            {"sub": user_id, "email": email}, "password_reset", timedelta(hours=1)
+        )
+
         resp = await client.post("/api/v1/auth/forgot-password", json={"email": email})
-        return resp.json()["reset_token"], email
+        assert resp.status_code == 200
+        assert "reset_token" not in resp.json()
+
+        return token, email
 
     async def test_reset_password_success(self, client):
         token, email = await self._register_and_get_token(client)

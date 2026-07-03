@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from typing import ClassVar
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,8 +14,27 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "Capsule Cloud API"
-    environment: str = "development"
+
+    # [REQUIRED] No default on purpose: defaulting to "development" here previously
+    # meant an operator who forgot to set ENVIRONMENT in production silently got
+    # dev-mode behavior (password-reset tokens echoed in API responses, Swagger
+    # docs exposed, etc.) — a fail-open trap. Now a missing/invalid value raises
+    # at startup instead of silently degrading security.
+    environment: str
     debug: bool = False
+
+    _VALID_ENVIRONMENTS: ClassVar[set[str]] = {"development", "staging", "production"}
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if v not in cls._VALID_ENVIRONMENTS:
+            raise ValueError(
+                f"ENVIRONMENT must be one of {sorted(cls._VALID_ENVIRONMENTS)}, got {v!r}. "
+                "Set it explicitly — there is no default."
+            )
+        return v
 
     # Kept for non-JWT HMAC uses (e.g. signed URLs, CSRF).
     # NOT used for JWT signing — EdDSA keypair below is used for that.
@@ -250,5 +270,8 @@ _settings: Settings | None = None
 def get_settings() -> Settings:
     global _settings
     if _settings is None:
-        _settings = Settings()
+        # environment has no default on purpose (see the field above) — it is
+        # sourced from the ENVIRONMENT env var at runtime, which mypy can't
+        # see through BaseSettings' constructor signature.
+        _settings = Settings()  # type: ignore[call-arg]
     return _settings

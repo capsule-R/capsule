@@ -32,6 +32,7 @@ async def client(tmp_path):
     dbmod._session_factory = None
     os.environ["DATABASE_URL"] = db_url
     os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-32-bytes-xx")
+    os.environ.setdefault("ENVIRONMENT", "development")
 
     try:
         from capsule_cloud.database import create_tables

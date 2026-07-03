@@ -188,6 +188,7 @@ jobs:
 
       - name: Run tests
         env:
+          ENVIRONMENT: development
           DATABASE_URL: postgresql://postgres:test_password@localhost:5432/capsule_test
           REDIS_URL: redis://localhost:6379
         run: pytest tests/ -v --cov=capsule_cloud --cov-fail-under=80

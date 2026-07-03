@@ -197,8 +197,10 @@ async def forgot_password(
 ) -> dict:
     """Generate a password-reset token.
 
-    In production this sends an email with the reset link.
-    For development the reset token is returned in the response body.
+    Always returns the same generic message regardless of whether the account
+    exists (avoids user enumeration) or which environment is running — the
+    token is never echoed in the HTTP response. In development it is logged
+    to the console instead so the flow is testable without email.
     """
     import structlog as _log
     logger = _log.get_logger(__name__)
@@ -251,11 +253,13 @@ async def forgot_password(
                 logger.error("password_reset.email_failed", email=str(body.email), error=err_msg)
 
         if settings.environment == "development":
-            # Return token directly in dev so the flow is testable without email
-            return {
-                "message": "Password reset token generated. In production this would be emailed.",
-                "reset_token": reset_token,
-            }
+            # Never echo the token in the response — log it so the flow is
+            # testable locally without needing a real email provider.
+            logger.info(
+                "password_reset.dev_token",
+                email=str(body.email),
+                reset_token=reset_token,
+            )
 
     return {"message": "If an account exists with that email, you'll receive a reset link shortly."}
 
