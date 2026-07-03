@@ -17,6 +17,7 @@ from capsule_trace.core.models import (
     LLMResponse,
     LLMUsage,
 )
+from capsule_trace.replay.cassette import CassetteMissError, compute_request_hash
 
 logger = logging.getLogger("capsule.integrations.openai")
 
@@ -235,10 +236,17 @@ def _complete_payload(
 
         cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
         if session is not None:
+            kwargs = request_kwargs or {}
             session.write_cassette(
                 cassette_id,
                 {
-                    "request": request_kwargs or {},
+                    "request_hash": compute_request_hash(
+                        model=payload.model,
+                        messages=kwargs.get("messages", []),
+                        temperature=kwargs.get("temperature"),
+                        max_tokens=kwargs.get("max_tokens"),
+                    ),
+                    "request": kwargs,
                     "raw_response": _to_raw_dict(response),
                     "model": payload.model,
                 },
@@ -270,6 +278,12 @@ def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception,
         session.write_cassette(
             cassette_id,
             {
+                "request_hash": compute_request_hash(
+                    model=payload.model,
+                    messages=request_kwargs.get("messages", []),
+                    temperature=request_kwargs.get("temperature"),
+                    max_tokens=request_kwargs.get("max_tokens"),
+                ),
                 "request": request_kwargs,
                 "error": str(exc),
                 "exception_type": type(exc).__name__,
@@ -282,12 +296,30 @@ def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception,
 
 
 def _cassette_response_openai(store: Any, kwargs: dict[str, Any]) -> Any:
-    """Return a mock OpenAI response object built from the next cassette entry."""
+    """Return a mock OpenAI response object matching this exact request.
+
+    Matches by the canonical request hash recorded at capture time — NOT
+    insertion/tar order, which is not the same as recording order and used
+    to serve silently-wrong responses. A request with no matching cassette
+    is a real divergence and must fail loudly, not fall back to whatever
+    cassette happens to be next.
+    """
     from unittest.mock import MagicMock
 
-    cassette_data = store._pop_next() if hasattr(store, "_pop_next") else None
+    request_hash = compute_request_hash(
+        model=kwargs.get("model", "unknown"),
+        messages=kwargs.get("messages", []),
+        temperature=kwargs.get("temperature"),
+        max_tokens=kwargs.get("max_tokens"),
+    )
+    cassette_data = store.get_by_request_hash(request_hash)
     if cassette_data is None:
-        raise RuntimeError("capsule: no cassette available for replay step")
+        raise CassetteMissError(
+            f"capsule: no cassette recorded for this request (model={kwargs.get('model')!r}) "
+            "— the replayed call diverges from what was recorded"
+        )
+    if "error" in cassette_data:
+        raise RuntimeError(cassette_data["error"])
 
     raw = cassette_data.get("raw_response", cassette_data)
     mock_resp = MagicMock()

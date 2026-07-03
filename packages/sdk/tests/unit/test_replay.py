@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
@@ -65,6 +66,14 @@ def _make_capsule_bytes(
                 }
             }
 
+    # Real hash, computed the same way verify_integrity() does: sha256 over
+    # each event's raw JSON bytes (in written order), not a re-serialization
+    # of the loaded Event models. An empty string here makes verify_integrity
+    # skip the check entirely, which used to hide the always-fails bug.
+    events_hash = hashlib.sha256()
+    for ev in events:
+        events_hash.update(json.dumps(ev).encode())
+
     manifest = {
         "capsule_version": "1.0",
         "format_spec_url": "https://capsule-five-delta.vercel.app/spec/v1.0",
@@ -72,7 +81,7 @@ def _make_capsule_bytes(
         "session_id": session_id,
         "integrity": {
             "algorithm": "sha256",
-            "events_hash": "",
+            "events_hash": events_hash.hexdigest(),
             "cassettes_hash": "",
             "snapshots_hash": "",
         },
@@ -290,6 +299,107 @@ def test_diff_different_step_counts():
 # ──────────────────────────────────────────────────────────────
 # Replayer — from_session_id (round-trip through SQLite)
 # ──────────────────────────────────────────────────────────────
+
+
+def test_replay_activates_and_clears_replay_store(monkeypatch):
+    """P1: set_replay_store() had zero callers — replay() must activate the
+    ContextVar for the duration of the walk and clear it afterwards, so
+    patched integrations re-executed during a replay actually serve from
+    cassettes instead of live APIs."""
+    from capsule_trace.replay.mode import get_replay_store
+
+    data = _make_capsule_bytes(n_events=2)
+    replayer = Replayer.from_bytes(data)
+
+    seen_during_replay = []
+    original = Replayer._replay_event
+
+    def _spy(self, event, modifications):
+        seen_during_replay.append(get_replay_store())
+        return original(self, event, modifications)
+
+    monkeypatch.setattr(Replayer, "_replay_event", _spy)
+
+    assert get_replay_store() is None
+    replayer.replay()
+    assert get_replay_store() is None, "replay store must be cleared after replay() returns"
+    assert len(seen_during_replay) == 2
+    assert all(store is replayer._store for store in seen_during_replay)
+
+
+def test_replay_live_mode_does_not_activate_replay_store(monkeypatch):
+    from capsule_trace.replay.mode import get_replay_store
+
+    data = _make_capsule_bytes(n_events=2)
+    replayer = Replayer.from_bytes(data)
+
+    seen_during_replay = []
+    original = Replayer._replay_event
+
+    def _spy(self, event, modifications):
+        seen_during_replay.append(get_replay_store())
+        return original(self, event, modifications)
+
+    monkeypatch.setattr(Replayer, "_replay_event", _spy)
+
+    replayer.replay(mode="live")
+    assert seen_during_replay == [None, None]
+
+
+def test_branch_from_step_activates_replay_store(monkeypatch):
+    from capsule_trace.replay.mode import get_replay_store
+
+    data = _make_capsule_bytes(n_events=3)
+    replayer = Replayer.from_bytes(data)
+
+    seen_during_branch = []
+    original = Replayer._replay_event
+
+    def _spy(self, event, modifications):
+        seen_during_branch.append(get_replay_store())
+        return original(self, event, modifications)
+
+    monkeypatch.setattr(Replayer, "_replay_event", _spy)
+
+    replayer.branch_from_step(2)
+    assert get_replay_store() is None
+    assert len(seen_during_branch) == 2
+    assert all(store is replayer._store for store in seen_during_branch)
+
+
+def test_integrity_ok_after_real_record_export_reimport_cycle(tmp_path):
+    """P1: verify_integrity() used to always return False on a genuinely
+    recorded-and-exported capsule — the loader dropped `timestamp`, so
+    Pydantic regenerated it to load time, and the (now-removed)
+    re-serialize-then-hash approach hashed that wrong value. Exercise the
+    real SDK path end to end, not a hand-built fixture."""
+    from capsule_trace.core.exporter import export_capsule
+    from capsule_trace.core.models import Event, LLMCallPayload, LLMMessage
+    from capsule_trace.core.session import Session
+
+    backend = SQLiteBackend(tmp_path / "test.db")
+
+    with Session(agent_name="integrity-test", storage_backend=backend) as s:
+        sid = s.session_id
+        for i in range(3):
+            event = Event(
+                session_id=sid,
+                step_index=s.next_step_index(),
+                event_type=EventType.LLM_CALL,
+                duration_ms=42.0,
+                payload=LLMCallPayload(
+                    provider="openai",
+                    model="gpt-4o",
+                    messages=[LLMMessage(role="user", content=f"step {i}")],
+                ),
+            )
+            s.capture_event(event)
+
+    out = tmp_path / "roundtrip.capsule"
+    export_capsule(sid, backend, out)
+
+    result = Replayer.from_file(out).replay()
+    assert result.integrity_ok is True
 
 
 def test_replayer_from_session_id(tmp_path):
