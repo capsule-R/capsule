@@ -31,7 +31,7 @@ import io
 import json
 import logging
 import tarfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +39,7 @@ import zstandard as zstd
 
 from capsule_trace.core.models import Event, EventType, SessionMetadata
 from capsule_trace.replay.cassette import CassetteStore
+from capsule_trace.replay.mode import replay_scope
 
 logger = logging.getLogger("capsule.replay")
 
@@ -84,6 +85,12 @@ class _Archive:
     events: list[Event]
     cassettes: dict[str, Any]
     snapshots: dict[int, Any]
+    # Raw bytes of each events/*.json member, in the same sorted-filename
+    # order the exporter wrote and hashed them in. verify_integrity() hashes
+    # these directly — the exporter's manifest hash was computed over the
+    # exact blobs on disk, not a re-serialization of the parsed Event models
+    # (whose field order/precision/defaults can legitimately differ).
+    _event_blobs: list[bytes] = field(default_factory=list, repr=False)
 
     @staticmethod
     def from_bytes(data: bytes) -> _Archive:
@@ -109,8 +116,11 @@ class _Archive:
 
         event_names = sorted(k for k in files if k.startswith("events/"))
         events: list[Event] = []
+        event_blobs: list[bytes] = []
         for name in event_names:
-            d = json.loads(files[name])
+            blob = files[name]
+            event_blobs.append(blob)
+            d = json.loads(blob)
             events.append(
                 Event(
                     event_id=d["event_id"],
@@ -118,6 +128,12 @@ class _Archive:
                     step_index=d["step_index"],
                     parent_event_id=d.get("parent_event_id"),
                     event_type=EventType(d["event_type"]),
+                    # Preserve the original capture timestamp — without this,
+                    # Pydantic's default_factory regenerates it to *load*
+                    # time on every Event(...) construction below, which
+                    # also used to poison the (now-removed) re-serialized
+                    # integrity hash.
+                    timestamp=d["timestamp"],
                     duration_ms=d.get("duration_ms", 0.0),
                     payload=d.get("payload", {}),
                 )
@@ -142,6 +158,7 @@ class _Archive:
             events=events,
             cassettes=cassettes,
             snapshots=snapshots,
+            _event_blobs=event_blobs,
         )
 
     @staticmethod
@@ -149,15 +166,13 @@ class _Archive:
         return _Archive.from_bytes(path.read_bytes())
 
     def verify_integrity(self) -> bool:
-        """Recompute SHA-256 of event blobs and compare to manifest."""
+        """Recompute SHA-256 of the raw event blobs and compare to manifest."""
         expected = self.manifest.get("integrity", {}).get("events_hash", "")
         if not expected:
             return True  # No hash stored — skip check
 
-        # Reserialise events to bytes in the same order they were written
         h = hashlib.sha256()
-        for event in self.events:
-            blob = json.dumps(event.model_dump_json_safe(), indent=2, default=str).encode()
+        for blob in self._event_blobs:
             h.update(blob)
 
         return bool(h.hexdigest() == expected)
@@ -218,19 +233,32 @@ class Replayer:
 
     # ── Replay ───────────────────────────────────────────────
 
-    def replay(self) -> ReplayResult:
+    def replay(self, mode: str = "cassette") -> ReplayResult:
         """Replay all steps deterministically from cassettes.
 
         Returns a ReplayResult whose .events list is the replayed sequence.
         Every llm_call event's payload is augmented with
         ``replayed_response`` taken directly from the cassette.
+
+        mode="cassette" (default) activates the replay store for the
+        duration of the call, so any patched integration code re-executed
+        during it serves from cassettes instead of live APIs.
+        mode="live" skips activation — any live calls re-executed during the
+        walk are genuinely live.
         """
         integrity_ok = self._archive.verify_integrity()
         replayed: list[Event] = []
 
-        for event in self._archive.events:
-            replayed_event = self._replay_event(event, modifications=None)
-            replayed.append(replayed_event)
+        def _walk() -> None:
+            for event in self._archive.events:
+                replayed_event = self._replay_event(event, modifications=None)
+                replayed.append(replayed_event)
+
+        if mode == "cassette":
+            with replay_scope(self._store):
+                _walk()
+        else:
+            _walk()
 
         return ReplayResult(
             session_id=self.session_id,
@@ -256,9 +284,10 @@ class Replayer:
         if step < 0 or step > self.step_count:
             raise IndexError(f"step {step} out of range for session with {self.step_count} steps")
 
-        pre_branch = [
-            self._replay_event(e, modifications=None) for e in self._archive.events[:step]
-        ]
+        with replay_scope(self._store):
+            pre_branch = [
+                self._replay_event(e, modifications=None) for e in self._archive.events[:step]
+            ]
 
         return BranchResult(
             session_id=self.session_id,

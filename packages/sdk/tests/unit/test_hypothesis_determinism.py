@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
@@ -30,6 +31,20 @@ def _build_capsule(session_id: str, events_data: list[dict[str, Any]]) -> bytes:
         "tags": [],
         "user_metadata": {},
     }
+
+    # Finish populating each event before computing the hash or writing
+    # anything — verify_integrity() hashes the exact bytes on disk.
+    for i, ev in enumerate(events_data):
+        ev["session_id"] = session_id
+        ev["step_index"] = i
+        ev["event_id"] = f"evt_{i:04d}"
+        ev["timestamp"] = "2026-05-27T10:00:01+00:00"
+        ev["duration_ms"] = 10.0
+
+    events_hash = hashlib.sha256()
+    for ev in events_data:
+        events_hash.update(json.dumps(ev, default=str).encode())
+
     manifest = {
         "capsule_version": "1.0",
         "format_spec_url": "https://capsule-five-delta.vercel.app/spec/v1.0",
@@ -37,7 +52,7 @@ def _build_capsule(session_id: str, events_data: list[dict[str, Any]]) -> bytes:
         "session_id": session_id,
         "integrity": {
             "algorithm": "sha256",
-            "events_hash": "",
+            "events_hash": events_hash.hexdigest(),
             "cassettes_hash": "",
             "snapshots_hash": "",
         },
@@ -63,11 +78,6 @@ def _build_capsule(session_id: str, events_data: list[dict[str, Any]]) -> bytes:
         add("manifest.json", manifest)
         add("session.json", session)
         for i, ev in enumerate(events_data):
-            ev["session_id"] = session_id
-            ev["step_index"] = i
-            ev["event_id"] = f"evt_{i:04d}"
-            ev["timestamp"] = "2026-05-27T10:00:01+00:00"
-            ev["duration_ms"] = 10.0
             add(f"events/{i + 1:04d}-{ev['event_type']}.json", ev)
 
     cctx = zstd.ZstdCompressor(level=3)

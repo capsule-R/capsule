@@ -16,6 +16,7 @@ from capsule_trace.core.models import (
     LLMParameters,
     LLMResponse,
 )
+from capsule_trace.replay.cassette import CassetteMissError, compute_request_hash
 
 logger = logging.getLogger("capsule.integrations.google")
 
@@ -42,13 +43,20 @@ def _patch_generate_content(genai: Any) -> None:
 
     @functools.wraps(original)
     def patched(self: Any, contents: Any, **kwargs: Any) -> Any:
+        from capsule_trace.replay.mode import get_replay_store
+
+        store = get_replay_store()
+        if store is not None:
+            return _cassette_response_google(store, self, contents, kwargs)
+
         session = get_current_session()
         if session is None:
             return original(self, contents, **kwargs)
 
+        model_name = getattr(self, "model_name", "gemini")
         payload = LLMCallPayload(
             provider="google",
-            model=getattr(self, "model_name", "gemini"),
+            model=model_name,
             parameters=LLMParameters(
                 temperature=kwargs.get("generation_config", {}).get("temperature"),
                 max_tokens=kwargs.get("generation_config", {}).get("max_output_tokens"),
@@ -70,6 +78,7 @@ def _patch_generate_content(genai: Any) -> None:
                 session.write_cassette(
                     cassette_id,
                     {
+                        "request_hash": _google_request_hash(model_name, contents, kwargs),
                         "request": {"contents": str(contents), **kwargs},
                         "raw_response": _to_raw_dict(response),
                         "model": payload.model,
@@ -117,6 +126,7 @@ def _write_error_cassette(
         session.write_cassette(
             cassette_id,
             {
+                "request_hash": _google_request_hash(payload.model, contents, kwargs),
                 "request": {"contents": str(contents), **kwargs},
                 "error": str(exc),
                 "exception_type": type(exc).__name__,
@@ -126,6 +136,51 @@ def _write_error_cassette(
         payload.cassette_ref = f"cassettes/{cassette_id}.json"
     except Exception:
         logger.debug("capsule: failed to write error cassette", exc_info=True)
+
+
+def _google_request_hash(model: str, contents: Any, kwargs: dict[str, Any]) -> str:
+    generation_config = kwargs.get("generation_config", {})
+    if not isinstance(generation_config, dict):
+        generation_config = {}
+    return compute_request_hash(
+        model=model,
+        messages=[{"role": "user", "content": str(contents)}],
+        temperature=generation_config.get("temperature"),
+        max_tokens=generation_config.get("max_output_tokens"),
+    )
+
+
+def _cassette_response_google(store: Any, client: Any, contents: Any, kwargs: dict[str, Any]) -> Any:
+    """Return a mock Google Generative AI response matching this exact request.
+
+    Without this, Google calls during "replay" hit the live API with real
+    keys — costing money and breaking determinism, since only the OpenAI
+    integration checked get_replay_store() before this fix.
+    """
+    from unittest.mock import MagicMock
+
+    model_name = getattr(client, "model_name", "gemini")
+    request_hash = _google_request_hash(model_name, contents, kwargs)
+    cassette_data = store.get_by_request_hash(request_hash)
+    if cassette_data is None:
+        raise CassetteMissError(
+            f"capsule: no cassette recorded for this request (model={model_name!r}) "
+            "— the replayed call diverges from what was recorded"
+        )
+    if "error" in cassette_data:
+        raise RuntimeError(cassette_data["error"])
+
+    raw = cassette_data.get("raw_response", cassette_data)
+    mock_resp = MagicMock()
+    mock_resp.text = raw.get("text") if isinstance(raw, dict) else None
+    candidates = raw.get("candidates", []) if isinstance(raw, dict) else []
+    mock_candidates = []
+    for c in candidates:
+        mock_c = MagicMock()
+        mock_c.finish_reason = c.get("finish_reason")
+        mock_candidates.append(mock_c)
+    mock_resp.candidates = mock_candidates
+    return mock_resp
 
 
 def _emit_event(session: Any, payload: LLMCallPayload, duration_ms: float) -> None:

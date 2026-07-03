@@ -17,6 +17,7 @@ from capsule_trace.core.models import (
     LLMResponse,
     LLMUsage,
 )
+from capsule_trace.replay.cassette import CassetteMissError, compute_request_hash
 
 logger = logging.getLogger("capsule.integrations.anthropic")
 
@@ -45,6 +46,12 @@ def _patch_sync_client(anthropic: Any) -> None:
 
     @functools.wraps(original)
     def patched_create(self: Any, **kwargs: Any) -> Any:
+        from capsule_trace.replay.mode import get_replay_store
+
+        store = get_replay_store()
+        if store is not None:
+            return _cassette_response_anthropic(store, kwargs)
+
         session = get_current_session()
         if session is None:
             return original(self, **kwargs)
@@ -72,6 +79,12 @@ def _patch_async_client(anthropic: Any) -> None:
 
     @functools.wraps(original)
     async def patched_async_create(self: Any, **kwargs: Any) -> Any:
+        from capsule_trace.replay.mode import get_replay_store
+
+        store = get_replay_store()
+        if store is not None:
+            return _cassette_response_anthropic(store, kwargs)
+
         session = get_current_session()
         if session is None:
             return await original(self, **kwargs)
@@ -150,10 +163,17 @@ def _complete_payload(
 
         cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
         if session is not None:
+            kwargs = request_kwargs or {}
             session.write_cassette(
                 cassette_id,
                 {
-                    "request": request_kwargs or {},
+                    "request_hash": compute_request_hash(
+                        model=payload.model,
+                        messages=kwargs.get("messages", []),
+                        temperature=kwargs.get("temperature"),
+                        max_tokens=kwargs.get("max_tokens"),
+                    ),
+                    "request": kwargs,
                     "raw_response": _to_raw_dict(response),
                     "model": payload.model,
                 },
@@ -185,6 +205,12 @@ def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception,
         session.write_cassette(
             cassette_id,
             {
+                "request_hash": compute_request_hash(
+                    model=payload.model,
+                    messages=request_kwargs.get("messages", []),
+                    temperature=request_kwargs.get("temperature"),
+                    max_tokens=request_kwargs.get("max_tokens"),
+                ),
                 "request": request_kwargs,
                 "error": str(exc),
                 "exception_type": type(exc).__name__,
@@ -194,6 +220,47 @@ def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception,
         payload.cassette_ref = f"cassettes/{cassette_id}.json"
     except Exception:
         logger.debug("capsule: failed to write error cassette", exc_info=True)
+
+
+def _cassette_response_anthropic(store: Any, kwargs: dict[str, Any]) -> Any:
+    """Return a mock Anthropic response matching this exact request.
+
+    Without this, Anthropic calls during "replay" hit the live API with
+    real keys — costing money and breaking determinism, since only the
+    OpenAI integration checked get_replay_store() before this fix.
+    """
+    from unittest.mock import MagicMock
+
+    request_hash = compute_request_hash(
+        model=kwargs.get("model", "unknown"),
+        messages=kwargs.get("messages", []),
+        temperature=kwargs.get("temperature"),
+        max_tokens=kwargs.get("max_tokens"),
+    )
+    cassette_data = store.get_by_request_hash(request_hash)
+    if cassette_data is None:
+        raise CassetteMissError(
+            f"capsule: no cassette recorded for this request (model={kwargs.get('model')!r}) "
+            "— the replayed call diverges from what was recorded"
+        )
+    if "error" in cassette_data:
+        raise RuntimeError(cassette_data["error"])
+
+    raw = cassette_data.get("raw_response", cassette_data)
+    mock_resp = MagicMock()
+    mock_resp.content = []
+    if isinstance(raw, dict) and raw.get("content"):
+        for block in raw["content"]:
+            mock_block = MagicMock()
+            mock_block.type = block.get("type", "text")
+            mock_block.text = block.get("text")
+            mock_resp.content.append(mock_block)
+    mock_resp.stop_reason = raw.get("stop_reason", "end_turn") if isinstance(raw, dict) else "end_turn"
+    mock_resp.usage = MagicMock()
+    usage = raw.get("usage", {}) if isinstance(raw, dict) else {}
+    mock_resp.usage.input_tokens = usage.get("input_tokens", 0)
+    mock_resp.usage.output_tokens = usage.get("output_tokens", 0)
+    return mock_resp
 
 
 def _emit_event(session: Any, payload: LLMCallPayload, duration_ms: float) -> None:

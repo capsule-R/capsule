@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import tarfile
 import uuid
+from datetime import datetime, timezone
 
 import zstandard as zstd
+from sqlalchemy import select
+
+from capsule_cloud import storage as _storage
+from capsule_cloud.database import get_session_factory
+from capsule_cloud.models import Session as CloudSession, Workspace
+from capsule_cloud.routers.sessions import _local_replay
+from capsule_cloud.schemas import TriggerReplayRequest
 
 
 def _make_capsule_bytes(session_id: str | None = None) -> bytes:
@@ -521,6 +530,102 @@ class TestSessionReplay:
         data = resp.json()
         assert data["status"] == "error"
         assert data["session_id"] == sid
+
+
+def _fake_cloud_session(sid: str) -> CloudSession:
+    return CloudSession(
+        id=sid,
+        workspace_id="wsid",
+        agent_name="agent",
+        started_at=datetime.now(timezone.utc),
+        step_count=1,
+        storage_path=f"wsid/{sid}.capsule",
+        storage_size_bytes=10,
+        integrity_hash="x",
+    )
+
+
+class TestLocalReplayErrorPaths:
+    """Direct unit tests of _local_replay's error handling — these are the
+    genuine error paths a real deployment hits (storage backend down,
+    replay subprocess hanging), not reachable via the mocked-storage happy
+    path the HTTP-level replay tests exercise."""
+
+    async def test_storage_download_failure_returns_error_status(self, monkeypatch):
+        async def _raise_not_found(path):
+            raise FileNotFoundError(f"no such object: {path}")
+
+        monkeypatch.setattr(_storage, "download", _raise_not_found)
+
+        session = _fake_cloud_session("sid")
+        status_str, error, result = await _local_replay(session, TriggerReplayRequest(mode="cassette"))
+
+        assert status_str == "error"
+        assert "not found" in error.lower()
+        assert result is None
+
+    async def test_storage_download_generic_failure_returns_error_status(self, monkeypatch):
+        async def _raise_generic(path):
+            raise ConnectionError("storage backend unreachable")
+
+        monkeypatch.setattr(_storage, "download", _raise_generic)
+
+        session = _fake_cloud_session("sid2")
+        status_str, error, result = await _local_replay(session, TriggerReplayRequest(mode="cassette"))
+
+        assert status_str == "error"
+        assert "failed to download" in error.lower()
+        assert result is None
+
+    async def test_replay_subprocess_timeout_returns_error_status(self, monkeypatch):
+        async def _fake_download(path):
+            return b"fake capsule bytes"
+
+        monkeypatch.setattr(_storage, "download", _fake_download)
+
+        async def _raise_timeout(coro, *args, **kwargs):
+            coro.close()  # avoid a "coroutine was never awaited" warning
+            raise asyncio.TimeoutError()
+
+        monkeypatch.setattr(asyncio, "wait_for", _raise_timeout)
+
+        class _FakeProc:
+            returncode = None
+
+            async def communicate(self):
+                return b"", b""
+
+            def kill(self):
+                pass
+
+        async def _fake_create_subprocess_exec(*args, **kwargs):
+            return _FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+
+        session = _fake_cloud_session("sid3")
+        status_str, error, result = await _local_replay(session, TriggerReplayRequest(mode="cassette"))
+
+        assert status_str == "error"
+        assert "timed out" in error.lower()
+        assert result is None
+
+
+class TestStorageQuota:
+    async def test_upload_rejected_when_storage_quota_exceeded(self, client, auth_headers, workspace_id):
+        """Storage quota is enforced independently of the (disabled)
+        per-file plan-tier size limit."""
+        session_factory = get_session_factory()
+        async with session_factory() as db:
+            result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            ws = result.scalars().first()
+            ws.storage_quota_bytes = 10  # smaller than any real capsule upload
+            await db.commit()
+
+        sid = str(uuid.uuid4())
+        resp = await _upload_session(client, workspace_id, auth_headers, session_id=sid)
+        assert resp.status_code == 402
+        assert "quota" in resp.json()["detail"].lower()
 
 
 class TestSessionBranch:

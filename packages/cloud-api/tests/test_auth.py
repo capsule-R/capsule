@@ -235,6 +235,17 @@ class TestRefresh:
         )
         assert resp.status_code == 401
 
+    async def test_refresh_with_malformed_token_fails(self, client):
+        resp = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": "Bearer not.a.valid.jwt"},
+        )
+        assert resp.status_code == 401
+
+    async def test_refresh_unauthenticated(self, client):
+        resp = await client.post("/api/v1/auth/refresh")
+        assert resp.status_code == 401
+
 
 class TestMe:
     async def test_get_me_authenticated(self, client, auth_headers):
@@ -413,6 +424,44 @@ class TestResetPassword:
         )
         assert resp.status_code == 400
 
+    async def test_reset_password_expired_token_rejected(self, client):
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "expired-reset@example.com", "password": "supersecretpassword1"},
+        )
+        access_token = signup_resp.json()["access_token"]
+        me_resp = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_id = me_resp.json()["id"]
+
+        # Mint a reset token that already expired an hour ago.
+        expired_token = _create_token(
+            {"sub": user_id, "email": "expired-reset@example.com"},
+            "password_reset",
+            timedelta(hours=-1),
+        )
+
+        resp = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": expired_token, "new_password": "newpassword1234"},
+        )
+        assert resp.status_code == 400
+
+    async def test_reset_password_wrong_token_type_rejected(self, client):
+        """An access token (not a password_reset token) must not work here."""
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "wrong-type-reset@example.com", "password": "supersecretpassword1"},
+        )
+        access_token = signup_resp.json()["access_token"]
+
+        resp = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": access_token, "new_password": "newpassword1234"},
+        )
+        assert resp.status_code == 400
+
     async def test_reset_password_token_replay_rejected(self, client):
         token, _ = await self._register_and_get_token(client, "replay@example.com")
         # First use succeeds
@@ -496,6 +545,34 @@ class TestChangePassword:
             headers=auth_headers,
         )
         assert resp.status_code == 401
+
+    async def test_change_password_rejected_for_oauth_account(self, client):
+        """An OAuth-only account (hashed_password=None) has nothing to
+        verify a "current password" against — must be rejected, not 500."""
+        from capsule_cloud.auth import create_access_token
+        from capsule_cloud.database import get_session_factory
+        from capsule_cloud.models import User
+
+        user_id = "oauth-test-user-id"
+        session_factory = get_session_factory()
+        async with session_factory() as db:
+            db.add(
+                User(
+                    id=user_id,
+                    email="oauth-user@example.com",
+                    auth_provider="google",
+                    hashed_password=None,
+                )
+            )
+            await db.commit()
+
+        oauth_access_token = create_access_token(user_id)
+        resp = await client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": "anything", "new_password": "newpassword1234"},
+            headers={"Authorization": f"Bearer {oauth_access_token}"},
+        )
+        assert resp.status_code == 400
 
     async def test_change_password_unauthenticated(self, client):
         resp = await client.post(

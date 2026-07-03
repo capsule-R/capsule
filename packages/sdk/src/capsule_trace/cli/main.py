@@ -208,7 +208,7 @@ def replay_session(session_id_or_file: str, mode: str, as_json: bool) -> None:
         f"({replayer.step_count} steps) in [bold]{mode}[/bold] mode..."
     )
 
-    result = replayer.replay()
+    result = replayer.replay(mode=mode)
 
     if as_json:
         click.echo(
