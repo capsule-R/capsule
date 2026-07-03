@@ -27,7 +27,7 @@ import modal
 _image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "capsule-sdk>=0.1.0",
+        "capsule-trace>=0.1.0",
         "aiobotocore[boto3]>=2.13.0",
         "zstandard>=0.22.0",
         "sqlalchemy>=2.0.0",
@@ -158,9 +158,11 @@ async def run_replay(
         tmp_path = f.name
 
     try:
-        cmd = ["capsule", "replay", tmp_path, f"--mode={mode}"]
-        if branch_from_step is not None:
-            cmd += [f"--branch-from={branch_from_step}"]
+        # NOTE: the CLI's "replay" command has no --branch-from option today
+        # (branching from a step is not yet implemented there), so
+        # branch_from_step is accepted for forward-compatibility but not
+        # currently forwarded to the subprocess.
+        cmd = ["capsule-trace", "replay", tmp_path, f"--mode={mode}", "--json"]
 
         proc = subprocess.run(
             cmd,

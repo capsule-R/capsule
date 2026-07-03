@@ -586,7 +586,7 @@ async def _local_replay(
             "original_steps": parsed.get("original_steps"),
         }
     except FileNotFoundError:
-        return "error", "capsule CLI not found — install capsule-sdk in the API server environment", None
+        return "error", "capsule-trace CLI not found — install capsule-trace in the API server environment", None
     except Exception as exc:
         return "error", str(exc), None
     finally:

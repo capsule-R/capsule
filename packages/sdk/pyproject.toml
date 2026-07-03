@@ -56,6 +56,9 @@ dev = [
 
 [project.scripts]
 capsule-trace = "capsule_trace.cli:main"
+# Alias so cloud-api's replay worker (and anyone following the shorter, more
+# obvious name) can invoke this as plain "capsule" too.
+capsule = "capsule_trace.cli:main"
 
 [project.urls]
 Homepage = "https://capsule-five-delta.vercel.app"
