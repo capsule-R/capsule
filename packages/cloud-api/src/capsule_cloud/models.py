@@ -35,6 +35,10 @@ class User(Base):
     hashed_password = Column(String)          # null for OAuth users
     auth_provider = Column(String, nullable=False, default="email")
     auth_provider_id = Column(String)
+    # Bulk refresh-token revocation: any refresh token whose `iat` predates
+    # this timestamp is rejected, without needing to track every issued jti
+    # individually. Set on password change/reset.
+    refresh_tokens_valid_after = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -129,6 +133,19 @@ class ApiKey(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
     workspace = relationship("Workspace", back_populates="api_keys")
+
+
+class RevokedToken(Base):
+    """Single-token revocation list, populated on logout. Checked by
+    get_current_user_from_refresh; rows can be purged once expires_at has
+    passed (an expired token can't be used again anyway)."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
 
 class Replay(Base):

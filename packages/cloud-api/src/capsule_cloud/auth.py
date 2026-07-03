@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
-from capsule_cloud.models import ApiKey, User, WorkspaceMember
+from capsule_cloud.models import ApiKey, RevokedToken, User, WorkspaceMember
 
 # ── Password hashing (Argon2id) ───────────────────────────────
 
@@ -179,17 +179,94 @@ async def get_current_user_from_refresh(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Authenticate request via Refresh token (for the /auth/refresh endpoint)."""
+    """Authenticate request via Refresh token (for the /auth/refresh endpoint).
+
+    Rejects tokens that were explicitly revoked at logout (jti in
+    revoked_tokens) or that predate a bulk revocation from a password
+    change/reset (see revoke_all_refresh_tokens).
+    """
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user_id = _decode_token(credentials.credentials, _REFRESH_TOKEN_TYPE)
+    payload = _decode_token_payload(credentials.credentials, _REFRESH_TOKEN_TYPE)
+    user_id: str = payload["sub"]
+    jti: str | None = payload.get("jti")
+
+    if jti and await _is_refresh_token_revoked(jti, db):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
+
     result = await db.execute(
         select(User).where(User.id == user_id, User.deleted_at.is_(None))
     )
     user = result.scalars().first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    if user.refresh_tokens_valid_after is not None:
+        iat = payload.get("iat")
+        issued_at = datetime.fromtimestamp(iat, tz=timezone.utc) if iat else None
+        valid_after = user.refresh_tokens_valid_after
+        if valid_after.tzinfo is None:
+            valid_after = valid_after.replace(tzinfo=timezone.utc)
+        if issued_at is None or issued_at < valid_after:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
+
     return user
+
+
+# ── Refresh-token revocation ──────────────────────────────────
+
+
+async def _is_refresh_token_revoked(jti: str, db: AsyncSession) -> bool:
+    result = await db.execute(select(RevokedToken).where(RevokedToken.jti == jti))
+    return result.scalars().first() is not None
+
+
+async def revoke_refresh_token(token: str, db: AsyncSession) -> None:
+    """Record a single refresh token's jti as revoked (used by /auth/logout).
+
+    Best-effort: an already-invalid/expired/malformed token is silently
+    ignored — logout must never fail just because the client's token was
+    already stale, and an expired token couldn't be used again anyway.
+    """
+    try:
+        payload = _decode_token_payload(token, _REFRESH_TOKEN_TYPE)
+    except HTTPException:
+        return
+
+    jti = payload.get("jti")
+    user_id = payload.get("sub")
+    exp = payload.get("exp")
+    if not jti or not user_id or not exp:
+        return
+
+    if await _is_refresh_token_revoked(jti, db):
+        return
+
+    db.add(
+        RevokedToken(
+            jti=jti,
+            user_id=user_id,
+            expires_at=datetime.fromtimestamp(exp, tz=timezone.utc),
+        )
+    )
+    await db.commit()
+
+
+def revoke_all_refresh_tokens(user: User) -> None:
+    """Invalidate every refresh token issued to this user up to now, without
+    tracking each one individually — any token whose `iat` predates this
+    timestamp is rejected by get_current_user_from_refresh from now on.
+
+    `iat` is a JWT NumericDate — PyJWT encodes it truncated to whole seconds.
+    Truncate this threshold the same way, otherwise a token minted a
+    fraction of a second *after* revocation can floor to an `iat` that looks
+    earlier than a microsecond-precision `valid_after` and get wrongly
+    rejected.
+
+    Does not commit; the caller should commit alongside its own changes
+    (e.g. the new password hash) in one transaction.
+    """
+    user.refresh_tokens_valid_after = datetime.now(timezone.utc).replace(microsecond=0)
 
 
 async def get_workspace_member(

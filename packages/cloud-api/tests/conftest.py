@@ -37,6 +37,12 @@ async def client(tmp_path):
     try:
         from capsule_cloud.database import create_tables
         from capsule_cloud.main import create_app
+        from capsule_cloud.rate_limit import limiter
+
+        # The limiter is a module-level singleton shared across the whole
+        # test session — reset its counters so one test's login/signup/
+        # forgot-password calls don't eat into another test's rate limit.
+        limiter.reset()
 
         app = create_app()
         await create_tables()  # replaces TestClient lifespan startup
