@@ -16,7 +16,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from capsule_cloud.auth import get_current_user, get_workspace_member
+from capsule_cloud.auth import get_current_principal, get_current_user, get_workspace_member
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud import storage as _storage
@@ -67,7 +67,7 @@ async def upload_session(
     workspace_id: str,
     file: UploadFile = File(..., description=".capsule archive"),
     metadata: str = Form(..., description="JSON-encoded SessionUploadMetadata"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> CloudSession:
     """Upload a `.capsule` file and register the session in the cloud."""
@@ -234,7 +234,7 @@ async def list_sessions(
     cursor: str | None = None,
     agent_name: str | None = None,
     status: str | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> SessionListResponse:
     await get_workspace_member(workspace_id, current_user, db)
@@ -394,7 +394,7 @@ async def session_stats(
 async def get_session(
     workspace_id: str,
     session_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> SessionResponse:
     await get_workspace_member(workspace_id, current_user, db)

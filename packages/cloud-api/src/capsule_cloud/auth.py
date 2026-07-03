@@ -213,11 +213,18 @@ async def get_workspace_member(
     return member
 
 
-async def authenticate_api_key(  # pragma: no cover
+async def authenticate_api_key(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[User, ApiKey]:
-    """Authenticate via API key. Returns (user, api_key) tuple."""
+    """Authenticate via API key. Returns (user, api_key) tuple.
+
+    Callers that scope a request to a specific workspace_id (i.e. every
+    session/workspace route) MUST also verify ``api_key.workspace_id`` matches
+    that workspace — see get_current_principal. Without that check, a key
+    minted for one workspace would authenticate as the key owner's full User,
+    who may belong to (and could then act on) other workspaces too.
+    """
     if credentials is None or not credentials.credentials.startswith("csk_"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
     key_hash = hash_api_key(credentials.credentials)
@@ -237,16 +244,59 @@ async def authenticate_api_key(  # pragma: no cover
 
     from capsule_cloud.models import Workspace
     ws_result = await db.execute(
-        select(Workspace).where(Workspace.id == api_key.workspace_id)
+        select(Workspace).where(
+            Workspace.id == api_key.workspace_id, Workspace.deleted_at.is_(None)
+        )
     )
     workspace = ws_result.scalars().first()
     if workspace is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key workspace not found")
 
     user_result = await db.execute(
-        select(User).where(User.id == workspace.owner_id)
+        select(User).where(User.id == workspace.owner_id, User.deleted_at.is_(None))
     )
     user = user_result.scalars().first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key owner not found")
     return user, api_key
+
+
+async def get_current_principal(
+    workspace_id: str,
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Authenticate a workspace-scoped request via EITHER a JWT access token
+    OR a ``csk_...`` API key.
+
+    ``workspace_id`` is bound from the route's own path parameter (FastAPI
+    resolves sub-dependency parameters the same way it resolves endpoint
+    parameters). When authenticating via API key, the key's workspace_id must
+    match the workspace being accessed — otherwise a key minted for workspace
+    A could be used to act as its owner in workspace B too, since the key
+    resolves to the owner's full User account.
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if credentials.credentials.startswith("csk_"):
+        user, api_key = await authenticate_api_key(credentials, db)
+        if api_key.workspace_id != workspace_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This API key is not authorized for this workspace",
+            )
+        return user
+
+    user_id = _decode_token(credentials.credentials, _ACCESS_TOKEN_TYPE)
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalars().first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user

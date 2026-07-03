@@ -393,7 +393,7 @@ def upload_session_cmd(session_id: str, tags: str) -> None:
         sys.exit(1)
 
     # Resolve workspace ID
-    auth_headers = {"Authorization": f"Capsule {api_key}"}
+    auth_headers = {"Authorization": f"Bearer {api_key}"}
     try:
         ws_resp = httpx.get(f"{api_url}/api/v1/workspaces", headers=auth_headers, timeout=10)
     except httpx.ConnectError:
@@ -404,7 +404,12 @@ def upload_session_cmd(session_id: str, tags: str) -> None:
         console.print("Session expired. Run: capsule-trace login")
         sys.exit(1)
 
-    workspace_id = ws_resp.json()["workspaces"][0]["id"]
+    # The API returns a bare array of workspaces, not {"workspaces": [...]}.
+    workspaces = ws_resp.json()
+    if not workspaces:
+        console.print("No workspaces found for this account.")
+        sys.exit(1)
+    workspace_id = workspaces[0]["id"]
 
     # Build and send multipart upload
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
@@ -417,7 +422,7 @@ def upload_session_cmd(session_id: str, tags: str) -> None:
             headers=auth_headers,
             files=[
                 ("metadata", (None, metadata, "application/json")),
-                ("capsule", (f"{session_id}.capsule", capsule_bytes, "application/octet-stream")),
+                ("file", (f"{session_id}.capsule", capsule_bytes, "application/octet-stream")),
             ],
             timeout=60,
         )
@@ -514,7 +519,7 @@ def login(api_key: str, api_url: str) -> None:
 
     import httpx
 
-    if not (api_key.startswith("sk_live_") or api_key.startswith("sk_test_")):
+    if not api_key.startswith("csk_"):
         console.print(
             "Invalid API key format. Get your key from the dashboard under Settings → API Keys."
         )
@@ -523,7 +528,7 @@ def login(api_key: str, api_url: str) -> None:
     try:
         resp = httpx.get(
             f"{api_url}/api/v1/workspaces",
-            headers={"Authorization": f"Capsule {api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"},
             timeout=10,
         )
     except httpx.ConnectError:

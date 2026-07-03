@@ -145,6 +145,84 @@ async def _upload_with_agent(client, workspace_id, auth_headers, sid, agent_name
     )
 
 
+class TestApiKeyAuthentication:
+    """P0-5: API keys were dead code (authenticate_api_key had zero callers) —
+    upload/list must actually accept ``Bearer csk_...`` now, and a key must
+    only work for the workspace it was minted for."""
+
+    async def test_upload_and_list_with_api_key(self, client, auth_headers, workspace_id):
+        create_resp = await client.post(
+            f"/api/v1/workspaces/{workspace_id}/api-keys",
+            json={"name": "CLI Key"},
+            headers=auth_headers,
+        )
+        assert create_resp.status_code == 201
+        full_key = create_resp.json()["full_key"]
+        assert full_key.startswith("csk_")
+
+        api_key_headers = {"Authorization": f"Bearer {full_key}"}
+
+        sid = str(uuid.uuid4())
+        upload_resp = await _upload_session(client, workspace_id, api_key_headers, session_id=sid)
+        assert upload_resp.status_code == 201, upload_resp.json()
+
+        list_resp = await client.get(
+            f"/api/v1/workspaces/{workspace_id}/sessions",
+            headers=api_key_headers,
+        )
+        assert list_resp.status_code == 200
+        ids = [s["id"] for s in list_resp.json()["items"]]
+        assert sid in ids
+
+    async def test_api_key_rejected_for_other_workspace(self, client, auth_headers, workspace_id):
+        """A key minted for one workspace resolves to the owner's full User —
+        without an explicit scope check it would authenticate requests
+        against every other workspace that owner belongs to too."""
+        create_resp = await client.post(
+            f"/api/v1/workspaces/{workspace_id}/api-keys",
+            json={"name": "Scoped Key"},
+            headers=auth_headers,
+        )
+        full_key = create_resp.json()["full_key"]
+
+        other_ws_resp = await client.post(
+            "/api/v1/workspaces",
+            json={"name": "Other Workspace", "slug": "other-workspace-e2e"},
+            headers=auth_headers,
+        )
+        assert other_ws_resp.status_code == 201
+        other_workspace_id = other_ws_resp.json()["id"]
+
+        api_key_headers = {"Authorization": f"Bearer {full_key}"}
+        resp = await client.get(
+            f"/api/v1/workspaces/{other_workspace_id}/sessions",
+            headers=api_key_headers,
+        )
+        assert resp.status_code == 403
+
+    async def test_revoked_api_key_rejected(self, client, auth_headers, workspace_id):
+        create_resp = await client.post(
+            f"/api/v1/workspaces/{workspace_id}/api-keys",
+            json={"name": "Revoke Me"},
+            headers=auth_headers,
+        )
+        full_key = create_resp.json()["full_key"]
+        key_id = create_resp.json()["id"]
+
+        revoke_resp = await client.delete(
+            f"/api/v1/workspaces/{workspace_id}/api-keys/{key_id}",
+            headers=auth_headers,
+        )
+        assert revoke_resp.status_code == 204
+
+        api_key_headers = {"Authorization": f"Bearer {full_key}"}
+        resp = await client.get(
+            f"/api/v1/workspaces/{workspace_id}/sessions",
+            headers=api_key_headers,
+        )
+        assert resp.status_code == 401
+
+
 class TestSessionUpload:
     async def test_upload_success(self, client, auth_headers, workspace_id):
         resp = await _upload_session(client, workspace_id, auth_headers)
