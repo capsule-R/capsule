@@ -45,6 +45,12 @@ addopts = "-v --tb=short"
 [tool.coverage.run]
 source = ["capsule_cloud"]
 branch = true
+# SQLAlchemy's async ORM bridges sync ORM code to async I/O via greenlet
+# switches; anyio.to_thread (used for Argon2 hashing) dispatches to worker
+# threads. Without declaring both, coverage.py's tracer doesn't follow
+# execution across those boundaries and silently under-reports entire route
+# handlers as unexecuted even when fully covered by passing tests.
+concurrency = ["greenlet", "thread"]
 omit = [
     "*/capsule_cloud/replay_worker.py",
     "*/capsule_cloud/routers/branches.py",

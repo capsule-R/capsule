@@ -155,6 +155,115 @@ class TestMemberInviteSuccess:
         assert resp.status_code == 409
 
 
+class TestNonMemberAccess:
+    """A user with a valid account but no membership in a workspace must be
+    rejected the same way as if the workspace didn't exist — this also
+    prevents a workspace ID from leaking its existence to outsiders."""
+
+    async def _second_user_headers(self, client, email="outsider@example.com"):
+        resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": email, "password": "supersecretpassword1"},
+        )
+        assert resp.status_code == 201
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    async def test_non_member_cannot_get_workspace(self, client, workspace_id):
+        outsider_headers = await self._second_user_headers(client)
+        resp = await client.get(f"/api/v1/workspaces/{workspace_id}", headers=outsider_headers)
+        assert resp.status_code == 404
+
+    async def test_non_member_cannot_list_members(self, client, workspace_id):
+        outsider_headers = await self._second_user_headers(client, "outsider2@example.com")
+        resp = await client.get(
+            f"/api/v1/workspaces/{workspace_id}/members", headers=outsider_headers
+        )
+        assert resp.status_code == 404
+
+    async def test_non_member_cannot_update_workspace(self, client, workspace_id):
+        outsider_headers = await self._second_user_headers(client, "outsider3@example.com")
+        resp = await client.patch(
+            f"/api/v1/workspaces/{workspace_id}",
+            json={"name": "Hijacked"},
+            headers=outsider_headers,
+        )
+        assert resp.status_code == 404
+
+
+class TestMemberRolePermissions:
+    """Role enforcement on owner/admin-only workspace actions — a plain
+    "member" must be rejected the same way an unauthenticated request to a
+    protected admin endpoint would be."""
+
+    async def _invite_member_and_get_headers(self, client, auth_headers, workspace_id, email):
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": email, "password": "supersecretpassword1"},
+        )
+        assert signup_resp.status_code == 201
+        member_headers = {"Authorization": f"Bearer {signup_resp.json()['access_token']}"}
+
+        invite_resp = await client.post(
+            f"/api/v1/workspaces/{workspace_id}/members",
+            json={"email": email, "role": "member"},
+            headers=auth_headers,
+        )
+        assert invite_resp.status_code == 201
+        return member_headers
+
+    async def test_member_cannot_update_workspace(self, client, auth_headers, workspace_id):
+        member_headers = await self._invite_member_and_get_headers(
+            client, auth_headers, workspace_id, "plain-member-update@example.com"
+        )
+        resp = await client.patch(
+            f"/api/v1/workspaces/{workspace_id}",
+            json={"name": "Renamed by member"},
+            headers=member_headers,
+        )
+        assert resp.status_code == 403
+
+    async def test_member_cannot_delete_workspace(self, client, auth_headers, workspace_id):
+        member_headers = await self._invite_member_and_get_headers(
+            client, auth_headers, workspace_id, "plain-member-delete@example.com"
+        )
+        resp = await client.delete(
+            f"/api/v1/workspaces/{workspace_id}", headers=member_headers
+        )
+        assert resp.status_code == 403
+
+    async def test_member_cannot_invite_others(self, client, auth_headers, workspace_id):
+        member_headers = await self._invite_member_and_get_headers(
+            client, auth_headers, workspace_id, "plain-member-invite@example.com"
+        )
+        resp = await client.post(
+            f"/api/v1/workspaces/{workspace_id}/members",
+            json={"email": "someone-else@example.com", "role": "member"},
+            headers=member_headers,
+        )
+        assert resp.status_code == 403
+
+    async def test_member_cannot_remove_other_members(self, client, auth_headers, workspace_id):
+        member_headers = await self._invite_member_and_get_headers(
+            client, auth_headers, workspace_id, "plain-member-remove@example.com"
+        )
+        me_resp = await client.get("/api/v1/auth/me", headers=auth_headers)
+        owner_id = me_resp.json()["id"]
+        resp = await client.delete(
+            f"/api/v1/workspaces/{workspace_id}/members/{owner_id}",
+            headers=member_headers,
+        )
+        assert resp.status_code == 403
+
+    async def test_member_can_still_read_workspace(self, client, auth_headers, workspace_id):
+        """Role enforcement should only block owner/admin-only mutations —
+        a plain member must still be able to read the workspace."""
+        member_headers = await self._invite_member_and_get_headers(
+            client, auth_headers, workspace_id, "plain-member-read@example.com"
+        )
+        resp = await client.get(f"/api/v1/workspaces/{workspace_id}", headers=member_headers)
+        assert resp.status_code == 200
+
+
 class TestMemberRemove:
     async def _invite_user(self, client, auth_headers, workspace_id, email):
         await client.post(
