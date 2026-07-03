@@ -63,6 +63,15 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class LogoutRequest(BaseModel):
+    """Optional — if the client sends its refresh token, it is revoked
+    server-side so it can no longer mint new access tokens. Without one,
+    logout is still a 200 (matches the old fully-stateless behavior) but
+    revokes nothing."""
+
+    refresh_token: str | None = None
+
+
 # ── Workspaces ───────────────────────────────────────────────
 
 class CreateWorkspaceRequest(BaseModel):

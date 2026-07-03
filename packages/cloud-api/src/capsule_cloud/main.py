@@ -4,22 +4,35 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import create_tables
+from capsule_cloud.rate_limit import limiter
 from capsule_cloud.routers import api_keys, auth, branches, replays, sessions, workspaces
 from capsule_cloud.schemas import HealthResponse, ProblemDetail
 
 logger = structlog.get_logger(__name__)
 
 __version__ = "0.1.0"
+
+
+def _sanitize_pydantic_errors(errors: Sequence[Any]) -> list[dict[str, Any]]:
+    """Strip "input" and "ctx" from Pydantic's error dicts before they ever
+    reach a response body or a log that captures response bodies. Both can
+    embed the raw submitted value — e.g. a too-short-password error's
+    "input" field IS the password itself."""
+    return [{k: v for k, v in err.items() if k not in ("input", "ctx")} for err in errors]
 
 
 # ── Lifespan ──────────────────────────────────────────────────
@@ -53,6 +66,12 @@ def create_app() -> FastAPI:
         openapi_url="/api/v1/openapi.json" if _in_dev else None,
         lifespan=lifespan,
     )
+
+    # ── Rate limiting ────────────────────────────────────────
+    app.state.limiter = limiter
+    # slowapi's handler is typed for RateLimitExceeded specifically, which is
+    # narrower than Starlette's declared Callable[[Request, Exception], ...].
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     # ── CORS ──────────────────────────────────────────────────
     app.add_middleware(
@@ -108,11 +127,33 @@ def create_app() -> FastAPI:
             ).model_dump(),
         )
 
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(  # type: ignore[no-untyped-def]
+        request: Request, exc: RequestValidationError
+    ):
+        # This is what FastAPI actually raises for request body/query/path
+        # validation failures — NOT a plain HTTPException(422), so it must be
+        # registered against the exception class itself. A handler keyed on
+        # the bare status code 422 (see below) never intercepts these; that
+        # was silently dead code.
+        return JSONResponse(
+            status_code=422,
+            content=ProblemDetail(
+                title="Validation Error",
+                status=422,
+                detail=str(_sanitize_pydantic_errors(exc.errors())),
+                instance=str(request.url),
+                request_id=getattr(request.state, "request_id", None),
+            ).model_dump(),
+        )
+
     @app.exception_handler(422)
     async def validation_error_handler(request: Request, exc):  # type: ignore[no-untyped-def]
+        # Covers any *other* code path that raises HTTPException(422)
+        # directly (e.g. sessions.py's invalid-metadata-JSON check).
         detail = str(exc)
         if hasattr(exc, "errors"):
-            detail = str(exc.errors())
+            detail = str(_sanitize_pydantic_errors(exc.errors()))
         return JSONResponse(
             status_code=422,
             content=ProblemDetail(

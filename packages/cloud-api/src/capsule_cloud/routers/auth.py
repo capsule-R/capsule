@@ -1,11 +1,19 @@
 """Auth endpoints — signup, login, refresh, logout."""
 
-from __future__ import annotations
+# NOTE: intentionally no `from __future__ import annotations` here — slowapi's
+# @limiter.limit(...) wraps each endpoint in a function defined in slowapi's
+# own module, whose __globals__ (not __module__) is what typing.get_type_hints
+# uses to resolve string/forward-ref annotations. Under postponed evaluation
+# every annotation becomes a string, so FastAPI/Pydantic can't find e.g.
+# "SignupRequest" via that wrapper's globals and raises
+# PydanticUndefinedAnnotation. Python 3.11 (this project's floor) supports
+# `X | None` natively, so the future-import isn't needed for that syntax here.
 
 from datetime import timedelta
 
+import anyio.to_thread
 import ulid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,15 +25,19 @@ from capsule_cloud.auth import (
     get_current_user,
     get_current_user_from_refresh,
     hash_password,
+    revoke_all_refresh_tokens,
+    revoke_refresh_token,
     verify_password,
 )
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
 from capsule_cloud.models import User, Workspace, WorkspaceMember
+from capsule_cloud.rate_limit import limiter
 from capsule_cloud.schemas import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    LogoutRequest,
     ResetPasswordRequest,
     SignupRequest,
     TokenResponse,
@@ -43,7 +55,10 @@ _used_reset_jtis: set[str] = set()
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("3/minute")
+async def signup(
+    request: Request, body: SignupRequest, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
     """Create a new user account and return JWT tokens."""
     result = await db.execute(select(User).where(User.email == body.email))
     existing = result.scalars().first()
@@ -54,11 +69,12 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)) -> Tok
         )
 
     user_id = str(ulid.new())
+    hashed_password = await anyio.to_thread.run_sync(hash_password, body.password)
     user = User(
         id=user_id,
         email=str(body.email),
         full_name=body.full_name,
-        hashed_password=hash_password(body.password),
+        hashed_password=hashed_password,
     )
     db.add(user)
 
@@ -94,7 +110,10 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)) -> Tok
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("5/minute")
+async def login(
+    request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
     """Authenticate with email/password and return JWT tokens."""
     result = await db.execute(
         select(User).where(User.email == str(body.email), User.deleted_at.is_(None))
@@ -105,7 +124,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    if not verify_password(body.password, user.hashed_password):
+    valid = await anyio.to_thread.run_sync(verify_password, body.password, user.hashed_password)
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -174,24 +194,40 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This account uses OAuth login and has no password to change",
         )
-    if not verify_password(body.current_password, current_user.hashed_password):
+    valid = await anyio.to_thread.run_sync(
+        verify_password, body.current_password, current_user.hashed_password
+    )
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect",
         )
-    current_user.hashed_password = hash_password(body.new_password)
+    current_user.hashed_password = await anyio.to_thread.run_sync(hash_password, body.new_password)
+    # A password change should evict anyone else holding a valid refresh
+    # token for this account (e.g. an attacker with a stolen token) — not
+    # just future requests using the current session's own tokens.
+    revoke_all_refresh_tokens(current_user)
     await db.commit()
     return {"message": "Password changed successfully"}
 
 
 @router.post("/logout")
-async def logout() -> dict:
-    """Logout endpoint — client should clear its tokens. No server-side state to clear (stateless JWTs)."""
+async def logout(
+    body: LogoutRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Logout — revokes the given refresh token so it can't mint new access
+    tokens again. Without one, this is still a 200 (matches the previous
+    fully-stateless behavior) but there's nothing to revoke."""
+    if body and body.refresh_token:
+        await revoke_refresh_token(body.refresh_token, db)
     return {"message": "Logged out successfully"}
 
 
 @router.post("/forgot-password")
+@limiter.limit("3/minute")
 async def forgot_password(
+    request: Request,
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -295,6 +331,9 @@ async def reset_password(
     if user is None:
         raise _bad_token
 
-    user.hashed_password = hash_password(body.new_password)
+    user.hashed_password = await anyio.to_thread.run_sync(hash_password, body.new_password)
+    # Otherwise an attacker's stolen refresh token would keep minting access
+    # tokens for up to 30 days after the victim "recovered" their account.
+    revoke_all_refresh_tokens(user)
     await db.commit()
     return {"message": "Password updated successfully. You can now log in."}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 from capsule_cloud.auth import _create_token
@@ -39,6 +40,21 @@ class TestSignup:
             json={"email": "short@example.com", "password": "short"},
         )
         assert resp.status_code == 422
+
+    async def test_signup_validation_error_never_echoes_submitted_password(self, client):
+        """P1: the 422 handler used to include Pydantic's "input" field
+        verbatim — for a too-short password, that field IS the password
+        itself, so it must not survive into the response body."""
+        secret_value = "l3ak-me"  # 7 chars — fails min_length=8
+        resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "leak-check@example.com", "password": secret_value},
+        )
+        assert resp.status_code == 422
+        body_text = resp.text
+        assert secret_value not in body_text
+        assert '"input"' not in body_text
+        assert '"ctx"' not in body_text
 
     async def test_signup_invalid_email(self, client):
         resp = await client.post(
@@ -78,6 +94,119 @@ class TestLogin:
             json={"email": "ghost@example.com", "password": "supersecretpassword1"},
         )
         assert resp.status_code == 401
+
+
+class TestRateLimiting:
+    """P1: brute-forcing login/signup/forgot-password must be throttled."""
+
+    async def test_login_rate_limited_after_5_per_minute(self, client):
+        await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "ratelimit-login@example.com", "password": "supersecretpassword1"},
+        )
+        statuses = []
+        for _ in range(6):
+            resp = await client.post(
+                "/api/v1/auth/login",
+                json={"email": "ratelimit-login@example.com", "password": "wrongpassword123"},
+            )
+            statuses.append(resp.status_code)
+        assert statuses[:5] == [401] * 5
+        assert statuses[5] == 429
+
+    async def test_signup_rate_limited_after_3_per_minute(self, client):
+        statuses = []
+        for i in range(4):
+            resp = await client.post(
+                "/api/v1/auth/signup",
+                json={
+                    "email": f"ratelimit-signup-{i}@example.com",
+                    "password": "supersecretpassword1",
+                },
+            )
+            statuses.append(resp.status_code)
+        assert statuses[:3] == [201] * 3
+        assert statuses[3] == 429
+
+    async def test_forgot_password_rate_limited_after_3_per_minute(self, client):
+        statuses = []
+        for _ in range(4):
+            resp = await client.post(
+                "/api/v1/auth/forgot-password",
+                json={"email": "ratelimit-forgot@example.com"},
+            )
+            statuses.append(resp.status_code)
+        assert statuses[:3] == [200] * 3
+        assert statuses[3] == 429
+
+    async def test_rate_limit_is_scoped_per_endpoint(self, client):
+        """Exhausting the login limit must not affect signup or vice versa."""
+        for _ in range(5):
+            await client.post(
+                "/api/v1/auth/login",
+                json={"email": "no-such-user@example.com", "password": "x" * 12},
+            )
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "still-allowed@example.com", "password": "supersecretpassword1"},
+        )
+        assert signup_resp.status_code == 201
+
+
+class TestArgon2OffEventLoop:
+    """P1: Argon2 hash/verify used to run directly on the event loop —
+    a burst of logins could stall every other request. Both must now go
+    through anyio.to_thread.run_sync()."""
+
+    async def test_login_verifies_password_via_anyio_to_thread(self, client, monkeypatch):
+        import anyio.to_thread
+
+        from capsule_cloud.auth import verify_password
+
+        await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "thread-check-login@example.com", "password": "supersecretpassword1"},
+        )
+
+        calls = []
+        original_run_sync = anyio.to_thread.run_sync
+
+        async def _spy_run_sync(func, *args, **kwargs):
+            calls.append(func)
+            return await original_run_sync(func, *args, **kwargs)
+
+        monkeypatch.setattr(anyio.to_thread, "run_sync", _spy_run_sync)
+
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "thread-check-login@example.com",
+                "password": "supersecretpassword1",
+            },
+        )
+        assert resp.status_code == 200
+        assert verify_password in calls
+
+    async def test_signup_hashes_password_via_anyio_to_thread(self, client, monkeypatch):
+        import anyio.to_thread
+
+        from capsule_cloud.auth import hash_password
+
+        calls = []
+        original_run_sync = anyio.to_thread.run_sync
+
+        async def _spy_run_sync(func, *args, **kwargs):
+            calls.append(func)
+            return await original_run_sync(func, *args, **kwargs)
+
+        monkeypatch.setattr(anyio.to_thread, "run_sync", _spy_run_sync)
+
+        resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "thread-check-signup@example.com", "password": "supersecretpassword1"},
+        )
+        assert resp.status_code == 201
+        assert hash_password in calls
 
 
 class TestRefresh:
@@ -126,6 +255,40 @@ class TestLogout:
 
     async def test_logout_unauthenticated(self, client):
         resp = await client.post("/api/v1/auth/logout")
+        assert resp.status_code == 200
+
+    async def test_logout_revokes_provided_refresh_token(self, client):
+        """P1: logout used to be a pure no-op — a refresh token handed to
+        /auth/logout must actually stop working afterwards."""
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "logout-revoke@example.com", "password": "supersecretpassword1"},
+        )
+        refresh_token = signup_resp.json()["refresh_token"]
+
+        logout_resp = await client.post(
+            "/api/v1/auth/logout", json={"refresh_token": refresh_token}
+        )
+        assert logout_resp.status_code == 200
+
+        refresh_resp = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {refresh_token}"},
+        )
+        assert refresh_resp.status_code == 401
+
+    async def test_logout_with_empty_body_still_succeeds(self, client):
+        """Without a refresh_token there's nothing to revoke, but the call
+        must not fail — old clients that don't send one must keep working."""
+        resp = await client.post("/api/v1/auth/logout", json={})
+        assert resp.status_code == 200
+
+    async def test_logout_with_garbage_token_does_not_error(self, client):
+        """Logout must be best-effort: a malformed/expired token should not
+        turn a routine logout call into a 500."""
+        resp = await client.post(
+            "/api/v1/auth/logout", json={"refresh_token": "not.a.valid.jwt"}
+        )
         assert resp.status_code == 200
 
 
@@ -265,6 +428,56 @@ class TestResetPassword:
         )
         assert resp2.status_code == 400
 
+    async def test_reset_password_revokes_existing_refresh_tokens(self, client):
+        """P1: without this, a stolen refresh token would keep minting new
+        access tokens for up to 30 days after the victim "recovered" their
+        account via password reset."""
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "reset-revoke@example.com", "password": "supersecretpassword1"},
+        )
+        old_refresh_token = signup_resp.json()["refresh_token"]
+        access_token = signup_resp.json()["access_token"]
+
+        # JWT `iat` has 1-second resolution; make sure the revocation
+        # timestamp is unambiguously after the old token's iat.
+        await asyncio.sleep(1.1)
+
+        me_resp = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_id = me_resp.json()["id"]
+        reset_token = _create_token(
+            {"sub": user_id, "email": "reset-revoke@example.com"},
+            "password_reset",
+            timedelta(hours=1),
+        )
+
+        reset_resp = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": reset_token, "new_password": "brandnewpassword1"},
+        )
+        assert reset_resp.status_code == 200
+
+        refresh_resp = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {old_refresh_token}"},
+        )
+        assert refresh_resp.status_code == 401
+
+        # A token minted *after* the reset must still work.
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "reset-revoke@example.com", "password": "brandnewpassword1"},
+        )
+        assert login_resp.status_code == 200
+        new_refresh_token = login_resp.json()["refresh_token"]
+        refresh_resp2 = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {new_refresh_token}"},
+        )
+        assert refresh_resp2.status_code == 200
+
 
 class TestChangePassword:
     async def test_change_password_success(self, client, auth_headers):
@@ -290,6 +503,46 @@ class TestChangePassword:
             json={"current_password": "supersecretpassword1", "new_password": "newpassword1234"},
         )
         assert resp.status_code == 401
+
+    async def test_change_password_revokes_old_refresh_tokens(self, client):
+        """P1: an attacker with a stolen refresh token must be evicted the
+        moment the legitimate user changes their password."""
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "change-revoke@example.com", "password": "supersecretpassword1"},
+        )
+        access_token = signup_resp.json()["access_token"]
+        old_refresh_token = signup_resp.json()["refresh_token"]
+
+        # JWT `iat` has 1-second resolution; make sure the revocation
+        # timestamp is unambiguously after the old token's iat.
+        await asyncio.sleep(1.1)
+
+        change_resp = await client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": "supersecretpassword1", "new_password": "newpassword1234"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert change_resp.status_code == 200
+
+        refresh_resp = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {old_refresh_token}"},
+        )
+        assert refresh_resp.status_code == 401
+
+        # A refresh token minted *after* the change must still work.
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "change-revoke@example.com", "password": "newpassword1234"},
+        )
+        assert login_resp.status_code == 200
+        new_refresh_token = login_resp.json()["refresh_token"]
+        refresh_resp2 = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {new_refresh_token}"},
+        )
+        assert refresh_resp2.status_code == 200
 
 
 class TestUpdateMe:
