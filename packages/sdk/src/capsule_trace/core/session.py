@@ -169,8 +169,7 @@ class Session:
                 redacted[key] = self._redact_dict(value)
             elif isinstance(value, list):
                 redacted[key] = [
-                    self._redact_dict(item) if isinstance(item, dict) else item
-                    for item in value
+                    self._redact_dict(item) if isinstance(item, dict) else item for item in value
                 ]
             else:
                 redacted[key] = value

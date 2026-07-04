@@ -49,9 +49,7 @@ def test_anthropic_serves_from_cassette_during_replay_no_live_call():
     # Deliberately invalid key — a real network call here would raise, not
     # return successfully.
     client = anthropic_sdk.Anthropic(api_key="sk-ant-invalid-test-key")
-    response = client.messages.create(
-        model="claude-3-opus", max_tokens=100, messages=messages
-    )
+    response = client.messages.create(model="claude-3-opus", max_tokens=100, messages=messages)
 
     assert response.content[0].text == "cassette answer"
     assert response.content[0].type == "text"

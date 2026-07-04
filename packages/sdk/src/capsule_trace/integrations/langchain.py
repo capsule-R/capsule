@@ -38,10 +38,13 @@ try:
     _LANGCHAIN_AVAILABLE = True
 except ImportError:
     _LANGCHAIN_AVAILABLE = False
-    BaseCallbackHandler = object
+
+    class BaseCallbackHandler:  # type: ignore[no-redef]
+        """Stand-in used only when langchain-core isn't installed —
+        CapsuleCallbackHandler.__init__ raises before this could matter."""
 
 
-class CapsuleCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
+class CapsuleCallbackHandler(BaseCallbackHandler):
     """LangChain callback handler that records LLM calls and tool invocations
     into the current Capsule session.
 

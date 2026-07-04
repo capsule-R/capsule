@@ -271,7 +271,9 @@ def _to_raw_dict(response: Any) -> Any:
         return {"repr": repr(response)}
 
 
-def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception, request_kwargs: dict[str, Any]) -> None:
+def _write_error_cassette(
+    session: Any, payload: LLMCallPayload, exc: Exception, request_kwargs: dict[str, Any]
+) -> None:
     """Record a failed call so replay can reproduce the failure, not just successes."""
     try:
         cassette_id = f"llm-{uuid.uuid4().hex[:8]}"

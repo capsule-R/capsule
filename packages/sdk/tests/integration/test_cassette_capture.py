@@ -41,9 +41,7 @@ def _mock_openai_response(content: str = "Mocked response") -> MagicMock:
     response.usage.total_tokens = 15
     response.model_dump.return_value = {
         "id": "chatcmpl-test",
-        "choices": [
-            {"message": {"content": content}, "finish_reason": "stop"}
-        ],
+        "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
     return response
@@ -59,25 +57,22 @@ def test_cassette_written_during_capture_and_exported(tmp_path, backend):
 
     # Patch the *instance* attribute — this is what the data-descriptor
     # design in openai.py is built to intercept (see its module docstring).
-    with patch.object(
-        client.chat.completions, "create", MagicMock(return_value=mock_response)
+    with (
+        patch.object(client.chat.completions, "create", MagicMock(return_value=mock_response)),
+        Session(agent_name="cassette-test", storage_backend=backend) as s,
     ):
-        with Session(agent_name="cassette-test", storage_backend=backend) as s:
-            session_id = s.session_id
-            client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": "hello"}],
-            )
+        session_id = s.session_id
+        client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": "hello"}],
+        )
 
     cassettes = backend.read_cassettes(session_id)
     assert len(cassettes) == 1, "expected the LLM call to persist exactly one cassette"
 
     cassette_data = next(iter(cassettes.values()))
     assert cassette_data["request"]["model"] == "gpt-4o"
-    assert (
-        cassette_data["raw_response"]["choices"][0]["message"]["content"]
-        == "Mocked response"
-    )
+    assert cassette_data["raw_response"]["choices"][0]["message"]["content"] == "Mocked response"
 
     # The archive must actually contain the cassette file the event's
     # cassette_ref points at — this is what replay reads from.
@@ -104,18 +99,20 @@ def test_error_cassette_written_on_failed_call(tmp_path, backend):
 
     client = openai_sdk.OpenAI(api_key="test-key")
 
-    with patch.object(
-        client.chat.completions,
-        "create",
-        MagicMock(side_effect=RuntimeError("rate limited")),
+    with (
+        patch.object(
+            client.chat.completions,
+            "create",
+            MagicMock(side_effect=RuntimeError("rate limited")),
+        ),
+        pytest.raises(RuntimeError),
+        Session(agent_name="cassette-error-test", storage_backend=backend) as s,
     ):
-        with pytest.raises(RuntimeError):
-            with Session(agent_name="cassette-error-test", storage_backend=backend) as s:
-                session_id = s.session_id
-                client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[{"role": "user", "content": "hello"}],
-                )
+        session_id = s.session_id
+        client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": "hello"}],
+        )
 
     cassettes = backend.read_cassettes(session_id)
     assert len(cassettes) == 1

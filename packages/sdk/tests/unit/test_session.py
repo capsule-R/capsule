@@ -267,9 +267,10 @@ def test_redact_failure_logs_warning_and_still_stores_event(in_memory_backend, c
         agent_name="redact-failure-test", storage_backend=in_memory_backend, redact=["x"]
     ) as s:
         session_id = s.session_id
-        with patch.object(
-            Session, "_redact_dict", side_effect=RuntimeError("boom")
-        ), caplog.at_level(logging.WARNING, logger="capsule"):
+        with (
+            patch.object(Session, "_redact_dict", side_effect=RuntimeError("boom")),
+            caplog.at_level(logging.WARNING, logger="capsule"),
+        ):
             from capsule_trace.core.models import Event
 
             event = Event(
