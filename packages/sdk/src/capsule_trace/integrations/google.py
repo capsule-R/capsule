@@ -150,7 +150,9 @@ def _google_request_hash(model: str, contents: Any, kwargs: dict[str, Any]) -> s
     )
 
 
-def _cassette_response_google(store: Any, client: Any, contents: Any, kwargs: dict[str, Any]) -> Any:
+def _cassette_response_google(
+    store: Any, client: Any, contents: Any, kwargs: dict[str, Any]
+) -> Any:
     """Return a mock Google Generative AI response matching this exact request.
 
     Without this, Google calls during "replay" hit the live API with real

@@ -198,7 +198,9 @@ def _to_raw_dict(response: Any) -> Any:
         return {"repr": repr(response)}
 
 
-def _write_error_cassette(session: Any, payload: LLMCallPayload, exc: Exception, request_kwargs: dict[str, Any]) -> None:
+def _write_error_cassette(
+    session: Any, payload: LLMCallPayload, exc: Exception, request_kwargs: dict[str, Any]
+) -> None:
     """Record a failed call so replay can reproduce the failure, not just successes."""
     try:
         cassette_id = f"llm-{uuid.uuid4().hex[:8]}"
@@ -255,7 +257,9 @@ def _cassette_response_anthropic(store: Any, kwargs: dict[str, Any]) -> Any:
             mock_block.type = block.get("type", "text")
             mock_block.text = block.get("text")
             mock_resp.content.append(mock_block)
-    mock_resp.stop_reason = raw.get("stop_reason", "end_turn") if isinstance(raw, dict) else "end_turn"
+    mock_resp.stop_reason = (
+        raw.get("stop_reason", "end_turn") if isinstance(raw, dict) else "end_turn"
+    )
     mock_resp.usage = MagicMock()
     usage = raw.get("usage", {}) if isinstance(raw, dict) else {}
     mock_resp.usage.input_tokens = usage.get("input_tokens", 0)

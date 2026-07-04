@@ -29,7 +29,10 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        # "all" pulls in openai/anthropic/google-generativeai/langchain so the
+        # integration tests can exercise the real patching mechanism against
+        # each provider SDK, not just a hand-simulated capture_event() call.
+        run: pip install -e ".[dev,all]"
 
       - name: Ruff lint
         run: ruff check src/ tests/
@@ -58,7 +61,10 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        # "all" pulls in openai/anthropic/google-generativeai/langchain so the
+        # integration tests can exercise the real patching mechanism against
+        # each provider SDK, not just a hand-simulated capture_event() call.
+        run: pip install -e ".[dev,all]"
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --cov=capsule_trace --cov-report=xml --cov-fail-under=80
