@@ -42,6 +42,13 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./capsule_cloud.db"
+    # Publicly reachable DB URL for out-of-network workers (e.g. the Modal
+    # replay worker) to write results back. On Railway, database_url is the
+    # INTERNAL host (postgres.railway.internal) which Modal cannot reach, so
+    # the worker's status write-back silently fails and replays stay "queued".
+    # Set DATABASE_URL_DIRECT to the public/proxy URL (same one Alembic uses).
+    # Falls back to database_url when unset (fine for local/dev).
+    database_url_direct: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod
