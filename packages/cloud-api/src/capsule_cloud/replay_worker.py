@@ -118,6 +118,26 @@ async def _write_result(
         )
 
 
+def _extract_json(text: str) -> dict | None:
+    """Parse the JSON object emitted by ``capsule-trace replay --json``.
+
+    The CLI prints a human-readable "Replaying …" status line to stdout before
+    the JSON payload, so ``json.loads`` on the whole stream fails at char 0.
+    This finds the first ``{`` and decodes one JSON value from there, ignoring
+    any leading preamble or trailing output.
+    """
+    import json
+
+    start = text.find("{")
+    if start == -1:
+        return None
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text[start:])
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
 def _prepare_async_url(database_url: str) -> tuple[str, dict]:
     """Normalise a DB URL for asyncpg and decide whether SSL is needed.
 
@@ -183,10 +203,17 @@ async def run_replay(
     import json
     import os
     import subprocess
+    import sys
     import tempfile
 
     async def _finish(status: str, result: dict | None, error: str | None) -> dict:
         if database_url:
+            result_json = json.dumps(result) if result is not None else None
+            print(
+                f"capsule: writing result, status={status} "
+                f"result_json length={len(result_json or '')}",
+                file=sys.stderr,
+            )
             await _write_result(replay_id, database_url, status, result, error)
         return {"status": status, "result": result, "error": error}
 
@@ -225,10 +252,16 @@ async def run_replay(
                 "error", None, proc.stderr[-2000:] or f"capsule replay exited with code {proc.returncode}"
             )
 
-        try:
-            parsed = json.loads(proc.stdout)
-        except (json.JSONDecodeError, ValueError) as exc:
-            return await _finish("error", None, f"Could not parse replay output as JSON: {exc}")
+        # The CLI prints a human "Replaying …" status line to stdout before the
+        # JSON, so json.loads(whole stdout) fails at char 0. Extract the JSON
+        # object regardless of any preamble.
+        parsed = _extract_json(proc.stdout)
+        if parsed is None:
+            return await _finish(
+                "error",
+                None,
+                f"Could not parse replay output as JSON. stdout head: {proc.stdout[:200]!r}",
+            )
 
         result = {
             "is_deterministic": parsed.get("is_deterministic"),

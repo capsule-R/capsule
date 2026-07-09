@@ -203,10 +203,19 @@ def replay_session(session_id_or_file: str, mode: str, as_json: bool) -> None:
         console.print(f"[red]Failed to load session:[/red] {exc}")
         sys.exit(1)
 
-    console.print(
-        f"Replaying [cyan]{replayer.session_id}[/cyan] "
-        f"({replayer.step_count} steps) in [bold]{mode}[/bold] mode..."
-    )
+    # Keep stdout pure JSON when --json is set — machine consumers (e.g. the
+    # Modal replay worker) json.loads() stdout, and a human status line here
+    # would corrupt it. Route the status message to stderr instead.
+    if as_json:
+        click.echo(
+            f"Replaying {replayer.session_id} ({replayer.step_count} steps) in {mode} mode...",
+            err=True,
+        )
+    else:
+        console.print(
+            f"Replaying [cyan]{replayer.session_id}[/cyan] "
+            f"({replayer.step_count} steps) in [bold]{mode}[/bold] mode..."
+        )
 
     result = replayer.replay(mode=mode)
 
