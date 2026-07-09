@@ -197,7 +197,7 @@ table.tbl tbody tr:hover .row-actions { opacity: 1; }
 .env-switch .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
 .env-switch .et { font-size: 13px; font-weight: 500; }
 .env-switch .es { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); margin-left: auto; }
-.sb-nav { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; }
+.sb-nav { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; }
 .nav-group { margin-bottom: 6px; }
 .nav-group .gl { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-tertiary); padding: 14px 12px 8px; }
 .nav-item {
@@ -720,6 +720,10 @@ select.select {
     transform: translateX(-100%); box-shadow: 8px 0 40px rgba(0,0,0,0.5); display: flex;
   }
   .sidebar.sidebar-open { transform: translateX(0); }
+  /* Mobile drawer only: keep the footer (user menu + Sign out) clear of the
+     browser's bottom bar / home indicator. env() needs viewport-fit=cover;
+     the +24px guarantees breathing room even where the inset is 0. */
+  .sb-foot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); }
   .mobile-nav-toggle { display: flex; }
   .tb-search { display: none; }
   .grid-2 { grid-template-columns: 1fr; }
