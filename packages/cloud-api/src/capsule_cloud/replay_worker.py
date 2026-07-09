@@ -125,7 +125,14 @@ def _prepare_async_url(database_url: str) -> tuple[str, dict]:
     - Strips libpq-style sslmode/ssl query params asyncpg can't parse.
     - Enables SSL for public/remote hosts (Railway's public proxy requires it);
       no SSL for *.railway.internal or localhost.
+
+    Railway's public proxy presents a self-signed certificate, so the SSL
+    context skips verification (connection is still encrypted — we just don't
+    validate the cert chain / hostname). Without this, asyncpg raises
+    ``[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate`` and the
+    write-back fails, leaving replays stuck at "queued".
     """
+    import ssl
     from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
     url = database_url
@@ -141,7 +148,10 @@ def _prepare_async_url(database_url: str) -> tuple[str, dict]:
 
     connect_args: dict = {}
     if host and not host.endswith(".railway.internal") and host not in ("localhost", "127.0.0.1"):
-        connect_args = {"ssl": True}
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connect_args = {"ssl": ssl_ctx}
     return url, connect_args
 
 
