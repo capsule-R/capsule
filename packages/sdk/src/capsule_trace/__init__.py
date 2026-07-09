@@ -7,22 +7,15 @@ from pathlib import Path
 from capsule_trace.core.decorator import trace
 from capsule_trace.core.session import Session, get_current_session
 
-# Auto-activate integrations if the provider is installed
-try:
-    from capsule_trace.integrations.openai import patch as _patch_openai
+# Auto-activate integrations for every provider SDK that is installed
+# (OpenAI, Anthropic, Google Generative AI). autopatch_all() is the single
+# entry point — it import-guards each provider and patches it if present, so
+# importing capsule_trace instruments all of them without manual setup.
+from capsule_trace.integrations.autopatch import autopatch_all
 
-    _patch_openai()
-except ImportError:
-    pass
+autopatch_all()
 
-try:
-    from capsule_trace.integrations.anthropic import patch as _patch_anthropic
-
-    _patch_anthropic()
-except ImportError:
-    pass
-
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __all__ = ["trace", "Session", "get_current_session", "last_session_path"]
 
 
