@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _now() -> datetime:
@@ -97,7 +97,9 @@ class LLMCallPayload(BaseModel):
     error: str | None = None
     cassette_ref: str | None = None
 
-    model_config = {"extra": "allow"}
+    # protected_namespaces=() silences the pydantic warning about the `model`
+    # / `model_version` fields colliding with the protected "model_" namespace.
+    model_config = ConfigDict(extra="allow", protected_namespaces=())
 
 
 # ──────────────────────────────────────────────────────────────
