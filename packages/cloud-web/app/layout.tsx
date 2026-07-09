@@ -12,6 +12,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#0A0A0A',
+  // viewport-fit=cover is required for env(safe-area-inset-*) to resolve on
+  // iOS/Android — used by the mobile sidebar drawer footer padding.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
