@@ -41,6 +41,13 @@ def _sanitize_pydantic_errors(errors: Sequence[Any]) -> list[dict[str, Any]]:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     logger.info("capsule_cloud.startup", environment=settings.environment, version=__version__)
+    # Surface Modal replay config at boot (never log the secret values themselves)
+    # so it's obvious in Railway logs whether cloud replay is wired up.
+    logger.info(
+        "capsule_cloud.modal_config",
+        modal_token_configured=bool(settings.modal_token_id and settings.modal_token_secret),
+        writeback_db_direct_set=bool(settings.database_url_direct),
+    )
     await create_tables()
     yield
     logger.info("capsule_cloud.shutdown")

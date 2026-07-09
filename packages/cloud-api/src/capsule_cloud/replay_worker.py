@@ -79,12 +79,14 @@ async def _write_result(
     mode.
     """
     import json as _json
+    import sys
 
+    url, connect_args = _prepare_async_url(database_url)
     try:
         import sqlalchemy as sa
         from sqlalchemy.ext.asyncio import create_async_engine
 
-        engine = create_async_engine(database_url)
+        engine = create_async_engine(url, connect_args=connect_args)
         try:
             async with engine.begin() as conn:
                 await conn.execute(
@@ -102,8 +104,45 @@ async def _write_result(
                 )
         finally:
             await engine.dispose()
-    except Exception:
-        pass
+        # Confirm we actually reached the DB — Modal captures stderr.
+        print(f"capsule: wrote replay {replay_id} status={status}", file=sys.stderr)
+    except Exception as exc:
+        # Non-fatal (fire-and-forget worker), but LOG it — a silent failure
+        # here is exactly why replays got stuck at "queued" with no signal.
+        # Most common cause: database_url points at Railway's INTERNAL host,
+        # which Modal cannot reach (set DATABASE_URL_DIRECT to the public URL).
+        print(
+            f"capsule: _write_result failed for replay {replay_id} "
+            f"(db scheme={url.split('://')[0] if '://' in url else '?'}): {exc}",
+            file=sys.stderr,
+        )
+
+
+def _prepare_async_url(database_url: str) -> tuple[str, dict]:
+    """Normalise a DB URL for asyncpg and decide whether SSL is needed.
+
+    - Upgrades postgres:// / postgresql:// to the +asyncpg async driver.
+    - Strips libpq-style sslmode/ssl query params asyncpg can't parse.
+    - Enables SSL for public/remote hosts (Railway's public proxy requires it);
+      no SSL for *.railway.internal or localhost.
+    """
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    url = database_url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k.lower() not in ("sslmode", "ssl")]
+    url = urlunparse(parsed._replace(query=urlencode(kept)))
+
+    connect_args: dict = {}
+    if host and not host.endswith(".railway.internal") and host not in ("localhost", "127.0.0.1"):
+        connect_args = {"ssl": True}
+    return url, connect_args
 
 
 @app.function(timeout=300, memory=512)

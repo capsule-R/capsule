@@ -25,7 +25,9 @@ def trace(
     tags: list[str] | None = None,
     user_metadata: dict[str, Any] | None = None,
     redact: list[str] | None = None,
-    auto_upload: bool = False,
+    auto_upload: bool = bool(
+        os.environ.get("CAPSULE_API_KEY") and os.environ.get("CAPSULE_WORKSPACE_ID")
+    ),
     storage_backend: Any | None = None,
 ) -> Callable[[F], F]:
     """Decorator that wraps a function in a Capsule session.

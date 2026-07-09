@@ -623,9 +623,20 @@ async def trigger_replay(
     replay_result: dict | None = None
 
     if settings.modal_token_id and settings.modal_token_secret:  # pragma: no cover
+        # The worker runs on Modal's network and must write its result back to
+        # our DB. It CANNOT reach Railway's internal host — use the public
+        # DATABASE_URL_DIRECT when configured, falling back to database_url.
+        worker_db_url = settings.database_url_direct or settings.database_url
         try:
             import modal  # type: ignore[import-untyped]
 
+            _log.info(
+                "triggering_modal_worker",
+                replay_id=replay_id,
+                app="capsule-replay",
+                function="run_replay",
+                writeback_db_scheme=worker_db_url.split("://")[0] if "://" in worker_db_url else "?",
+            )
             run_replay = modal.Function.from_name("capsule-replay", "run_replay")
             await run_replay.spawn.aio(
                 replay_id=replay_id,
@@ -640,11 +651,14 @@ async def trigger_replay(
                 # finished — see replay_worker.py's _write_result. Without
                 # this the API would have no way to learn the outcome of a
                 # fire-and-forget Modal spawn.
-                database_url=settings.database_url,
+                database_url=worker_db_url,
             )
             replay_status = "queued"
+            _log.info("modal_worker_spawned", replay_id=replay_id, status=replay_status)
         except Exception as exc:
-            _log.warning("modal_spawn_failed", error=str(exc))
+            # exc_info so the real cause (e.g. function not deployed, bad
+            # token) is visible in Railway logs instead of a bare message.
+            _log.error("modal_trigger_failed", error=str(exc), exc_info=True)
             replay_status = "error"
             replay_error = str(exc)
     else:

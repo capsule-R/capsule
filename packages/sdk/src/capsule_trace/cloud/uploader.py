@@ -13,6 +13,7 @@ logger = logging.getLogger("capsule.cloud")
 
 def _get_cloud_config() -> dict[str, str]:
     """Read cloud config from env vars or ~/.capsule/cloud.json."""
+    # Set CAPSULE_CLOUD_URL env var to override (e.g. for self-hosted or staging)
     base_url = os.environ.get("CAPSULE_CLOUD_URL", "https://api.capsule.dev")
     api_key = os.environ.get("CAPSULE_API_KEY", "")
     workspace_id = os.environ.get("CAPSULE_WORKSPACE_ID", "")
