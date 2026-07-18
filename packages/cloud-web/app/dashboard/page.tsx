@@ -111,8 +111,11 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, [workspaceId, range]);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const [greeting, setGreeting] = useState('Welcome');
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreeting(hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening');
+  }, []);
 
   const total = stats?.total ?? 0;
   const failed = stats?.failed ?? 0;

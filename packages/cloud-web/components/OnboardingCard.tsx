@@ -33,7 +33,7 @@ export function OnboardingCard() {
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {STEPS.map((s) => (
-          <div key={s.n} style={{ flex: 1, minWidth: 220 }}>
+          <div key={s.n} style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6 }}>
               {s.n}
             </div>
@@ -53,6 +53,7 @@ export function OnboardingCard() {
                 color: 'var(--mono-text)',
                 whiteSpace: 'pre',
                 overflowX: 'auto',
+                flex: 1,
               }}
             >
               {s.code}
