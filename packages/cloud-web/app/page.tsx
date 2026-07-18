@@ -31,6 +31,7 @@ function useReveal() {
 
 /* ─── Nav ─────────────────────────────────────────────────── */
 const NAV_LINKS = [
+  { label: 'Demo', href: '#demo' },
   { label: 'How it works', href: '#how' },
   { label: 'The .capsule file', href: '#capsule' },
   { label: 'Features', href: '#features' },
@@ -359,6 +360,38 @@ export default function LandingPage() {
       </section>
 
 
+
+      {/* ── 60-SECOND DEMO ── */}
+      <section id="demo" className="lp-section bd">
+        <div className="lp-wrap">
+          <div className="lp-shead reveal">
+            <span className="eyebrow" style={{ marginBottom: 16 }}>60-second demo</span>
+            <h2>Watch a production failure get replayed.</h2>
+            <p>
+              A billing agent hallucinates a $1,249 refund on a $124.90 charge. Capsule captures it,
+              pinpoints the exact step — and replays the failure deterministically. No API keys, no randomness.
+            </p>
+          </div>
+          <div className="reveal" style={{ maxWidth: 960, margin: '0 auto' }}>
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              poster="/demo/capsule-yc-demo-poster.jpg"
+              style={{
+                display: 'block',
+                width: '100%',
+                borderRadius: 14,
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-card)',
+                boxShadow: '0 30px 90px rgba(0,0,0,0.5)',
+              }}
+            >
+              <source src="/demo/capsule-yc-demo.mp4" type="video/mp4" />
+            </video>
+          </div>
+        </div>
+      </section>
 
       {/* ── HOW IT WORKS ── */}
       <section id="how" className="lp-section">
