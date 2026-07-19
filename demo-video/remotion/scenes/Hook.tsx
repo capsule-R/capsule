@@ -13,11 +13,12 @@ const Line: React.FC<{
 }> = ({ children, at, dimAt, size = 62, color = T.textPrimary }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = spring({ frame: frame - at, fps, config: { damping: 16, stiffness: 120 } });
+  const enter = spring({ frame: frame - at, fps, config: { damping: 18, stiffness: 130 } });
   const dim = dimAt !== undefined
     ? interpolate(frame, [dimAt, dimAt + 12], [1, 0.32], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
     : 1;
   if (frame < at) return null;
+  const blur = (1 - enter) * 8;
   return (
     <div
       style={{
@@ -27,7 +28,8 @@ const Line: React.FC<{
         letterSpacing: '-0.02em',
         color,
         opacity: enter * dim,
-        transform: `translateY(${(1 - enter) * 26}px)`,
+        transform: `translateY(${(1 - enter) * 22}px)`,
+        filter: blur > 0.1 ? `blur(${blur.toFixed(2)}px)` : undefined,
         textAlign: 'center',
         lineHeight: 1.25,
       }}
@@ -42,7 +44,10 @@ export const Hook: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const logoAt = 100;
-  const logoEnter = spring({ frame: frame - logoAt, fps, config: { damping: 15, stiffness: 110 } });
+  // slightly underdamped — a whisper of overshoot as the brand settles in,
+  // never a bounce.
+  const logoEnter = spring({ frame: frame - logoAt, fps, config: { damping: 13, stiffness: 120 } });
+  const logoBlur = Math.max(0, (1 - logoEnter) * 6);
 
   return (
     <SceneBg>
@@ -60,7 +65,8 @@ export const Hook: React.FC = () => {
               gap: 22,
               marginTop: 34,
               opacity: logoEnter,
-              transform: `scale(${0.92 + 0.08 * logoEnter})`,
+              transform: `scale(${0.94 + 0.06 * logoEnter})`,
+              filter: logoBlur > 0.1 ? `blur(${logoBlur.toFixed(2)}px)` : undefined,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>

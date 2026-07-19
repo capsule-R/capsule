@@ -18,8 +18,10 @@ const clipsForCuts = manifest.scenes as unknown as Record<string, ClipInfo | nul
 // Splice the app's loading states out of the footage (cursor position is
 // identical on both sides of each cut, so the splice is invisible).
 const INSPECT_CUTS: JumpCut[] = [
-  { outBeat: 'nav_click', inBeat: 'sessions_loaded', outPad: 0.15 },
-  { outBeat: 'hero_click', inBeat: 'detail_loaded', outPad: 0.45 },
+  // Cut right at the click (0 pad) so the brief app "Loading…" state is spliced
+  // out; the branded ClickPulse carries the click emphasis across the seam.
+  { outBeat: 'nav_click', inBeat: 'sessions_loaded', outPad: 0.0 },
+  { outBeat: 'hero_click', inBeat: 'detail_loaded', outPad: 0.1 },
 ];
 const REPLAY_CUTS: JumpCut[] = [];
 
@@ -103,6 +105,29 @@ export const Main: React.FC = () => (
         <FootageScene
           clip={clips.inspect ?? null}
           cuts={INSPECT_CUTS}
+          shots={[
+            { atBeat: 'visual_start', offset: 0, zoom: 1.06, fx: 1000, fy: 430 },
+            { atBeat: 'nav_click', offset: -2, zoom: 1.06, fx: 1000, fy: 430 },
+            { atBeat: 'sessions_loaded', offset: 6, zoom: 1.06, fx: 1080, fy: 430 },
+            { atBeat: 'hero_click', offset: -2, zoom: 1.16, fx: 1080, fy: 393 },
+            { atBeat: 'detail_loaded', offset: 18, zoom: 1.05, fx: 1000, fy: 520 },
+            { atBeat: 'inspect_llm', offset: 8, zoom: 1.24, fx: 1060, fy: 770 },
+            { atBeat: 'inspect_error', offset: 8, zoom: 1.18, fx: 1063, fy: 548 },
+            { atBeat: 'scene_end', offset: -2, zoom: 1.12, fx: 1063, fy: 548 },
+          ]}
+          spotlights={[
+            { fromBeat: 'sessions_loaded', fromOffset: 14, toBeat: 'hero_click', toOffset: -4, x: 1080, y: 393, rw: 640, rh: 64, dim: 0.48 },
+            { fromBeat: 'inspect_llm', fromOffset: 14, toBeat: 'inspect_error', toOffset: -6, x: 1060, y: 765, rw: 470, rh: 120, dim: 0.5 },
+            { fromBeat: 'inspect_error', fromOffset: 12, toBeat: 'scene_end', toOffset: -8, x: 1063, y: 548, rw: 430, rh: 170, dim: 0.45 },
+          ]}
+          callouts={[
+            { fromBeat: 'sessions_loaded', fromOffset: 16, toBeat: 'hero_click', toOffset: -4, x: 843, y: 378, w: 80, h: 32, label: 'failed', side: 'top' },
+            { fromBeat: 'inspect_llm', fromOffset: 16, toBeat: 'inspect_error', toOffset: -8, x: 735, y: 716, w: 215, h: 32, label: '10× the real amount', side: 'bottom' },
+          ]}
+          pulses={[
+            { atBeat: 'nav_click', offset: -3, x: 83, y: 173 },
+            { atBeat: 'hero_click', offset: -3, x: 1080, y: 393 },
+          ]}
           overlays={[
             {
               fromBeat: 'visual_start',
@@ -144,6 +169,26 @@ export const Main: React.FC = () => (
         <FootageScene
           clip={clips.replay ?? null}
           cuts={REPLAY_CUTS}
+          shots={[
+            { atBeat: 'visual_start', offset: 0, zoom: 1.05, fx: 1000, fy: 520 },
+            { atBeat: 'replay_click', offset: -18, zoom: 1.26, fx: 1560, fy: 112 },
+            { atBeat: 'replay_click', offset: 2, zoom: 1.26, fx: 1560, fy: 112 },
+            { atBeat: 'replay_click', offset: 22, zoom: 1.12, fx: 1360, fy: 200 },
+            { atBeat: 'replay_banner', offset: 4, zoom: 1.16, fx: 1080, fy: 276 },
+            { atBeat: 'stdout_view', offset: 4, zoom: 1.2, fx: 720, fy: 300 },
+            { atBeat: 'scene_end', offset: -4, zoom: 1.1, fx: 900, fy: 300 },
+          ]}
+          spotlights={[
+            { fromBeat: 'visual_start', fromOffset: 30, toBeat: 'replay_click', toOffset: 0, x: 1560, y: 112, rw: 170, rh: 66, dim: 0.5 },
+            { fromBeat: 'replay_banner', fromOffset: 6, toBeat: 'stdout_view', toOffset: -4, x: 1080, y: 276, rw: 680, rh: 150, dim: 0.46 },
+            { fromBeat: 'stdout_view', fromOffset: 8, toBeat: 'scene_end', toOffset: -10, x: 720, y: 300, rw: 440, rh: 130, dim: 0.46 },
+          ]}
+          callouts={[
+            { fromBeat: 'visual_start', fromOffset: 34, toBeat: 'replay_click', toOffset: -2, x: 1528, y: 92, w: 104, h: 38, label: 'Replay', side: 'bottom' },
+            { fromBeat: 'stdout_view', fromOffset: 10, toBeat: 'scene_end', toOffset: -10, x: 470, y: 278, w: 200, h: 26, label: 'byte-identical', side: 'bottom' },
+          ]}
+          pulses={[{ atBeat: 'replay_click', offset: -2, x: 1578, y: 111 }]}
+          confirms={[{ atBeat: 'replay_banner', offset: 6, x: 690, y: 167 }]}
           overlays={[
             {
               fromBeat: 'visual_start',

@@ -12,12 +12,18 @@ export const Install: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const codeAt = 108; // frames — editor slides over the terminal
-  const codeEnter = spring({ frame: frame - codeAt, fps, config: { damping: 17, stiffness: 120 } });
+  const codeEnter = spring({ frame: frame - codeAt, fps, config: { damping: 18, stiffness: 130 } });
+  const termBlurOut = frame >= codeAt ? interpolate(codeEnter, [0, 1], [0, 3]) : 0;
 
   return (
     <SceneBg>
       <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ opacity: frame >= codeAt ? interpolate(codeEnter, [0, 1], [1, 0.25]) : 1 }}>
+        <div
+          style={{
+            opacity: frame >= codeAt ? interpolate(codeEnter, [0, 1], [1, 0.25]) : 1,
+            filter: termBlurOut > 0.1 ? `blur(${termBlurOut.toFixed(2)}px)` : undefined,
+          }}
+        >
           <Terminal
             width={1240}
             minHeight={470}
@@ -37,7 +43,8 @@ export const Install: React.FC = () => {
             <div
               style={{
                 opacity: codeEnter,
-                transform: `translateY(${(1 - codeEnter) * 40}px) scale(${0.97 + 0.03 * codeEnter})`,
+                transform: `translateY(${(1 - codeEnter) * 34}px) scale(${0.97 + 0.03 * codeEnter})`,
+                filter: (1 - codeEnter) > 0.02 ? `blur(${((1 - codeEnter) * 7).toFixed(2)}px)` : undefined,
               }}
             >
               <Window title="billing_agent.py" width={1240} minHeight={520}>
