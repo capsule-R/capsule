@@ -221,7 +221,12 @@ export default function SessionsPage() {
       </div>
 
       <div className="table-wrap" style={{ borderRadius: '0 0 var(--radius) var(--radius)' }}>
-        <table className="tbl">
+        <table className="tbl sessions-tbl">
+          <colgroup>
+            <col className="col-session" /><col className="col-agent" /><col className="col-steps" />
+            <col className="col-status" /><col className="col-duration" /><col className="col-cost" />
+            <col className="col-captured" /><col className="col-actions" />
+          </colgroup>
           <thead><tr>
             <th>Session</th><th>Agent</th><th>Steps</th><th>Status</th><th className="hide-mobile">Duration</th><th className="hide-mobile">Cost</th><th>Captured</th><th style={{ textAlign: 'right' }}>Actions</th>
           </tr></thead>
@@ -234,11 +239,11 @@ export default function SessionsPage() {
               <tr><td colSpan={8}><div className="empty">No sessions match these filters.</div></td></tr>
             ) : slice.map((s) => (
               <tr key={s.id} className="clickable" onClick={() => window.location.href = `/dashboard/sessions/${s.id}`}>
-                <td className="cell-mono"><div className="truncate-mobile" style={{ maxWidth: 120 }}>{s.id}</div></td>
+                <td className="cell-mono"><div className="truncate-mobile" title={s.id}>{s.id}</div></td>
                 <td>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 2, background: agentColor(s.agent), display: 'inline-block' }} />
-                    {s.agent}
+                  <span className="agent-name-cell">
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: agentColor(s.agent), display: 'inline-block', flexShrink: 0 }} />
+                    <span className="agent-name" title={s.agent}>{s.agent}</span>
                   </span>
                 </td>
                 <td className="cell-mono">{s.steps}</td>
