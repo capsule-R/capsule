@@ -86,7 +86,11 @@ export default function DashboardPage() {
             };
           });
           setRecentSessions(mapped);
-          setFailingSessions(mapped.filter((s) => s.status === 'err').slice(0, 4));
+          // "Needs attention" means genuine failures specifically — filtering
+          // on the ok/err boolean also swept in 'cancelled' sessions (same
+          // mismatch as the Sessions list's summary bar; see that page for
+          // the full explanation). Use the raw status label instead.
+          setFailingSessions(mapped.filter((s) => s.label === 'failed').slice(0, 4));
         }
       } catch (err) {
         console.error(err);

@@ -116,7 +116,13 @@ export default function SessionsPage() {
     const cutoff = Date.now() - (RANGE_MS[dateRange] ?? Infinity);
     return sessions.filter((s) => {
       if (status === 'ok' && !s.ok) return false;
-      if (status === 'err' && s.ok) return false;
+      // "Failed" means status === 'failed' specifically — not "anything
+      // that isn't success", which used to also sweep in 'cancelled'
+      // sessions. That mismatched the Overview page's /stats endpoint,
+      // which has always counted only true failures (see session_stats in
+      // cloud-api's sessions router), so the same account showed two
+      // different "failed" numbers depending on which page you were on.
+      if (status === 'err' && s.statusLabel !== 'failed') return false;
       if (agent && s.agent !== agent) return false;
       if (q && !s.id.toLowerCase().includes(q.toLowerCase())) return false;
       if (isFinite(cutoff) && s.ts && s.ts < cutoff) return false;
@@ -128,7 +134,7 @@ export default function SessionsPage() {
   const safePage = Math.min(page, totalPages);
   const slice = filtered.slice((safePage - 1) * PER, safePage * PER);
   const okCount = filtered.filter((s) => s.ok).length;
-  const errCount = filtered.filter((s) => !s.ok).length;
+  const errCount = filtered.filter((s) => s.statusLabel === 'failed').length;
   const totalCost = filtered.reduce((a, s) => a + s.costN, 0);
 
   const handleDownload = async (id: string) => {
