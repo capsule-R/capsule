@@ -52,6 +52,8 @@ from capsule_cloud.models import (  # noqa: E402
     Session as CloudSession,
 )
 from capsule_cloud.models import (
+    ApiKey,
+    AuditLog,
     Replay,
     User,
     Workspace,
@@ -354,9 +356,19 @@ def _cost_for(steps: list[dict]) -> tuple[int, int, float]:
 def _teardown_existing(db, existing_user: User) -> None:
     """Delete the demo user and everything scoped to their workspace(s) —
     replays, sessions (DB rows + their object-storage .capsule blobs),
-    memberships, and the workspace(s) themselves — so --force gives a
-    genuinely clean slate rather than erroring on unique-constraint
-    conflicts (e.g. the workspace slug) if creation runs again.
+    api keys, audit logs, memberships, and the workspace(s) themselves — so
+    --force gives a genuinely clean slate rather than erroring on
+    unique-constraint conflicts (e.g. the workspace slug) if creation runs
+    again.
+
+    Every child table with a workspace_id FK is deleted explicitly here,
+    rather than relying on the DB's ON DELETE CASCADE or SQLAlchemy's ORM
+    cascade: Workspace.api_keys is a declared relationship without
+    passive_deletes, so the ORM's default behaviour on `db.delete(ws)` is to
+    try to *null out* each ApiKey's workspace_id instead of deleting the
+    row — which fails outright since that column is NOT NULL. Explicit
+    deletes sidestep that regardless of how any given relationship is
+    configured.
     """
     workspaces = db.execute(
         select(Workspace).where(Workspace.owner_id == existing_user.id)
@@ -375,6 +387,8 @@ def _teardown_existing(db, existing_user: User) -> None:
 
         db.execute(delete(Replay).where(Replay.workspace_id == ws.id))
         db.execute(delete(CloudSession).where(CloudSession.workspace_id == ws.id))
+        db.execute(delete(ApiKey).where(ApiKey.workspace_id == ws.id))
+        db.execute(delete(AuditLog).where(AuditLog.workspace_id == ws.id))
         db.execute(delete(WorkspaceMember).where(WorkspaceMember.workspace_id == ws.id))
         db.delete(ws)
 
@@ -398,6 +412,32 @@ def main() -> None:
     if not database_url:
         print("ERROR: set DATABASE_URL_DIRECT (or DATABASE_URL) to a plain postgresql:// URL.", file=sys.stderr)
         sys.exit(1)
+
+    # Fail fast, loudly, and before touching the database: if real object
+    # storage is configured (i.e. this is pointed at production, not the
+    # local-disk fallback), every session upload below needs aiobotocore.
+    # Without this check, a missing dependency only shows up as repeated
+    # "could not delete storage blob" warnings during teardown (delete()
+    # degrades gracefully) followed by a hard crash on the very first
+    # session's upload() a moment later (which does not, and should not,
+    # degrade gracefully — a "successful" seed with no real .capsule data
+    # would silently reintroduce the broken-replay bug this script exists
+    # to fix).
+    from capsule_cloud.config import get_settings
+    settings = get_settings()
+    if settings.storage_endpoint:
+        try:
+            import aiobotocore.session  # noqa: F401
+        except ImportError:
+            print(
+                "ERROR: STORAGE_ENDPOINT is configured (this DB points at production), "
+                "which means uploading .capsule files needs aiobotocore, but it isn't "
+                "installed in this Python environment.\n"
+                "Fix: pip install \"aiobotocore[boto3]>=2.13.0\"\n"
+                "  (or: pip install -r " + str(Path(__file__).resolve().parent.parent / "requirements.txt") + ")",
+                file=sys.stderr,
+            )
+            sys.exit(1)
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     # This is a sync script (psycopg2) — strip any async driver suffix if present.
