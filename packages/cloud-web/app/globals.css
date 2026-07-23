@@ -177,6 +177,26 @@ table.tbl tr.clickable { cursor: pointer; }
 .cell-sub  { font-size: 12px; color: var(--text-tertiary); }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; opacity: .55; transition: opacity .15s; }
 table.tbl tbody tr:hover .row-actions { opacity: 1; }
+/* Truncates with an ellipsis at any viewport width — not just mobile, despite
+   the name (kept to avoid touching its one caller). Without this the box's
+   max-width is unenforced and long monospace IDs visually spill into the
+   next column. */
+.truncate-mobile { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Sessions list: fixed column widths so the Session/Agent/Status columns
+   can never bleed into each other, at any screen size. */
+table.tbl.sessions-tbl { table-layout: fixed; }
+table.tbl.sessions-tbl col.col-session  { width: 22%; }
+table.tbl.sessions-tbl col.col-agent    { width: 20%; }
+table.tbl.sessions-tbl col.col-steps    { width: 8%; }
+table.tbl.sessions-tbl col.col-status   { width: 12%; }
+table.tbl.sessions-tbl col.col-duration { width: 10%; }
+table.tbl.sessions-tbl col.col-cost     { width: 10%; }
+table.tbl.sessions-tbl col.col-captured { width: 10%; }
+table.tbl.sessions-tbl col.col-actions  { width: 8%; }
+table.tbl.sessions-tbl td, table.tbl.sessions-tbl th { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-name-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.agent-name-cell span.agent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* ── APP SHELL ── */
 .app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; }
@@ -754,7 +774,6 @@ select.select {
   .filter-spacer { display: none; }
   .sessions-summary { flex-wrap: wrap; gap: 16px !important; }
   .sessions-summary > div { width: calc(50% - 8px); }
-  .truncate-mobile { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .plan-grid { grid-template-columns: 1fr !important; }
 }
 
