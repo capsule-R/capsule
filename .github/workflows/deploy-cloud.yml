@@ -50,6 +50,12 @@ jobs:
           node-version: "20"
 
       - name: Deploy to Vercel (staging)
+        # Run from the repo root, not packages/cloud-web: the linked Vercel
+        # project already has its Root Directory set to packages/cloud-web,
+        # so running vercel deploy from inside that folder makes it append
+        # the same path a second time ("packages/cloud-web/packages/cloud-web
+        # does not exist").
+        working-directory: .
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -89,11 +95,13 @@ jobs:
         run: npx @railway/cli up --service capsule-api --environment production
 
       - name: Deploy Web to Vercel (production)
+        # Run from the repo root — see the matching comment in the staging
+        # job; the linked Vercel project's Root Directory is already
+        # packages/cloud-web.
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        working-directory: packages/cloud-web
         run: npx vercel deploy --prod --token $VERCEL_TOKEN --yes
 
       - name: Post-deploy health check

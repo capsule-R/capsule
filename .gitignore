@@ -86,3 +86,6 @@ logs/
 Thumbs.db
 
 .hypothesis/
+
+.vercel
+.env*
