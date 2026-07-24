@@ -27,7 +27,9 @@ class TestApiKeyCreate:
         assert resp.status_code == 201
         assert resp.json()["expires_at"] is not None
 
-    async def test_create_api_key_name_required(self, client, auth_headers, workspace_id):
+    async def test_create_api_key_name_required(
+        self, client, auth_headers, workspace_id
+    ):
         resp = await client.post(
             f"/api/v1/workspaces/{workspace_id}/api-keys",
             json={},
@@ -35,7 +37,9 @@ class TestApiKeyCreate:
         )
         assert resp.status_code == 422
 
-    async def test_full_key_not_returned_on_list(self, client, auth_headers, workspace_id):
+    async def test_full_key_not_returned_on_list(
+        self, client, auth_headers, workspace_id
+    ):
         await client.post(
             f"/api/v1/workspaces/{workspace_id}/api-keys",
             json={"name": "Secret Key"},

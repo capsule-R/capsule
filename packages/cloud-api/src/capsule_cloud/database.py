@@ -47,12 +47,16 @@ def _build_connect_args(url: str) -> dict:
 
 def _strip_ssl_query(url: str) -> str:
     """Remove libpq ``sslmode``/``ssl`` query params asyncpg can't parse."""
-    from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
     parsed = urlparse(url)
     if not parsed.query:
         return url
-    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k.lower() not in ("sslmode", "ssl")]
+    kept = [
+        (k, v)
+        for k, v in parse_qsl(parsed.query)
+        if k.lower() not in ("sslmode", "ssl")
+    ]
     return urlunparse(parsed._replace(query=urlencode(kept)))
 
 

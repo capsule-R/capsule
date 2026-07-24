@@ -135,6 +135,7 @@ class Settings(BaseSettings):
         # 3) If there's no PEM header, maybe the whole PEM was base64-encoded.
         if "-----BEGIN" not in s:
             import base64
+
             try:
                 decoded = base64.b64decode(s, validate=False).decode()
                 if "-----BEGIN" in decoded:
@@ -162,7 +163,7 @@ class Settings(BaseSettings):
         return f"-----BEGIN {label}-----\n{wrapped}\n-----END {label}-----\n"
 
     @model_validator(mode="after")
-    def ensure_secret_key(self) -> "Settings":
+    def ensure_secret_key(self) -> Settings:
         """Reject the well-known default secret_key in non-development environments."""
         default = "change-me-in-production-use-32-random-bytes"
         if self.secret_key == default and self.environment != "development":
@@ -173,7 +174,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def ensure_jwt_keypair(self) -> "Settings":
+    def ensure_jwt_keypair(self) -> Settings:
         """Auto-generate ephemeral Ed25519 keys in development if none are configured."""
         if not self.jwt_private_key or not self.jwt_public_key:
             if self.environment != "development":
@@ -187,17 +188,25 @@ class Settings(BaseSettings):
                 "Set JWT_PRIVATE_KEY + JWT_PUBLIC_KEY in .env for persistence.",
                 stacklevel=2,
             )
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-            from cryptography.hazmat.primitives.serialization import (
-                Encoding, NoEncryption, PrivateFormat, PublicFormat,
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+                Ed25519PrivateKey,
             )
+            from cryptography.hazmat.primitives.serialization import (
+                Encoding,
+                NoEncryption,
+                PrivateFormat,
+                PublicFormat,
+            )
+
             priv = Ed25519PrivateKey.generate()
             self.jwt_private_key = priv.private_bytes(
                 Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
             ).decode()
-            self.jwt_public_key = priv.public_key().public_bytes(
-                Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
-            ).decode()
+            self.jwt_public_key = (
+                priv.public_key()
+                .public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+                .decode()
+            )
         return self
 
     # Object storage (Backblaze B2 / Cloudflare R2 / any S3-compatible)
@@ -224,10 +233,7 @@ class Settings(BaseSettings):
     # Accepts comma-separated origins or a JSON array string.
     # Wildcards like https://*.vercel.app allow ANY app on that platform —
     # set ALLOWED_ORIGINS explicitly in production with only your own domains.
-    allowed_origins: str = (
-        "http://localhost:3000,"
-        "https://capsule-five-delta.vercel.app"
-    )
+    allowed_origins: str = "http://localhost:3000,https://capsule-five-delta.vercel.app"
 
     def get_cors_origins(self) -> list[str]:
         """Parse allowed_origins into a list (raw, may contain wildcards)."""
@@ -239,6 +245,7 @@ class Settings(BaseSettings):
             ]
         if v.startswith("["):
             import json
+
             try:
                 return json.loads(v)
             except Exception:

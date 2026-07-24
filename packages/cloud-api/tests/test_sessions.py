@@ -7,14 +7,15 @@ import io
 import json
 import tarfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import zstandard as zstd
 from sqlalchemy import select
 
 from capsule_cloud import storage as _storage
 from capsule_cloud.database import get_session_factory
-from capsule_cloud.models import Session as CloudSession, Workspace
+from capsule_cloud.models import Session as CloudSession
+from capsule_cloud.models import Workspace
 from capsule_cloud.routers.sessions import _local_replay
 from capsule_cloud.schemas import TriggerReplayRequest
 
@@ -116,7 +117,13 @@ async def _upload_session(client, workspace_id, auth_headers, session_id=None):
     )
     return await client.post(
         f"/api/v1/workspaces/{workspace_id}/sessions",
-        files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+        files={
+            "file": (
+                "test.capsule",
+                io.BytesIO(capsule_bytes),
+                "application/octet-stream",
+            )
+        },
         data={"metadata": metadata},
         headers=auth_headers,
     )
@@ -124,31 +131,53 @@ async def _upload_session(client, workspace_id, auth_headers, session_id=None):
 
 async def _upload_capsule(client, workspace_id, auth_headers, sid, capsule_bytes):
     metadata = json.dumps(
-        {"session_id": sid, "agent_name": "test-agent", "agent_version": "1.0.0",
-         "tags": [], "user_metadata": {}, "auto_redact": False}
+        {
+            "session_id": sid,
+            "agent_name": "test-agent",
+            "agent_version": "1.0.0",
+            "tags": [],
+            "user_metadata": {},
+            "auto_redact": False,
+        }
     )
     return await client.post(
         f"/api/v1/workspaces/{workspace_id}/sessions",
-        files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+        files={
+            "file": (
+                "test.capsule",
+                io.BytesIO(capsule_bytes),
+                "application/octet-stream",
+            )
+        },
         data={"metadata": metadata},
         headers=auth_headers,
     )
 
 
-async def _upload_with_agent(client, workspace_id, auth_headers, sid, agent_name="test-agent"):
+async def _upload_with_agent(
+    client, workspace_id, auth_headers, sid, agent_name="test-agent"
+):
     """Upload a minimal .capsule with a custom agent_name."""
     capsule_bytes = _make_capsule_bytes(sid)
-    metadata = json.dumps({
-        "session_id": sid,
-        "agent_name": agent_name,
-        "agent_version": "1.0.0",
-        "tags": [],
-        "user_metadata": {},
-        "auto_redact": False,
-    })
+    metadata = json.dumps(
+        {
+            "session_id": sid,
+            "agent_name": agent_name,
+            "agent_version": "1.0.0",
+            "tags": [],
+            "user_metadata": {},
+            "auto_redact": False,
+        }
+    )
     return await client.post(
         f"/api/v1/workspaces/{workspace_id}/sessions",
-        files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+        files={
+            "file": (
+                "test.capsule",
+                io.BytesIO(capsule_bytes),
+                "application/octet-stream",
+            )
+        },
         data={"metadata": metadata},
         headers=auth_headers,
     )
@@ -159,7 +188,9 @@ class TestApiKeyAuthentication:
     upload/list must actually accept ``Bearer csk_...`` now, and a key must
     only work for the workspace it was minted for."""
 
-    async def test_upload_and_list_with_api_key(self, client, auth_headers, workspace_id):
+    async def test_upload_and_list_with_api_key(
+        self, client, auth_headers, workspace_id
+    ):
         create_resp = await client.post(
             f"/api/v1/workspaces/{workspace_id}/api-keys",
             json={"name": "CLI Key"},
@@ -172,7 +203,9 @@ class TestApiKeyAuthentication:
         api_key_headers = {"Authorization": f"Bearer {full_key}"}
 
         sid = str(uuid.uuid4())
-        upload_resp = await _upload_session(client, workspace_id, api_key_headers, session_id=sid)
+        upload_resp = await _upload_session(
+            client, workspace_id, api_key_headers, session_id=sid
+        )
         assert upload_resp.status_code == 201, upload_resp.json()
 
         list_resp = await client.get(
@@ -183,7 +216,9 @@ class TestApiKeyAuthentication:
         ids = [s["id"] for s in list_resp.json()["items"]]
         assert sid in ids
 
-    async def test_api_key_rejected_for_other_workspace(self, client, auth_headers, workspace_id):
+    async def test_api_key_rejected_for_other_workspace(
+        self, client, auth_headers, workspace_id
+    ):
         """A key minted for one workspace resolves to the owner's full User —
         without an explicit scope check it would authenticate requests
         against every other workspace that owner belongs to too."""
@@ -242,18 +277,32 @@ class TestSessionUpload:
         assert data["status"] == "completed"
         assert data["tags"] == ["test"]
 
-    async def test_upload_duplicate_session_id(self, client, auth_headers, workspace_id):
+    async def test_upload_duplicate_session_id(
+        self, client, auth_headers, workspace_id
+    ):
         sid = str(uuid.uuid4())
-        resp1 = await _upload_session(client, workspace_id, auth_headers, session_id=sid)
+        resp1 = await _upload_session(
+            client, workspace_id, auth_headers, session_id=sid
+        )
         assert resp1.status_code == 201
-        resp2 = await _upload_session(client, workspace_id, auth_headers, session_id=sid)
+        resp2 = await _upload_session(
+            client, workspace_id, auth_headers, session_id=sid
+        )
         assert resp2.status_code == 409
 
-    async def test_upload_invalid_metadata_json(self, client, auth_headers, workspace_id):
+    async def test_upload_invalid_metadata_json(
+        self, client, auth_headers, workspace_id
+    ):
         capsule_bytes = _make_capsule_bytes()
         resp = await client.post(
             f"/api/v1/workspaces/{workspace_id}/sessions",
-            files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+            files={
+                "file": (
+                    "test.capsule",
+                    io.BytesIO(capsule_bytes),
+                    "application/octet-stream",
+                )
+            },
             data={"metadata": "this is not json"},
             headers=auth_headers,
         )
@@ -263,7 +312,13 @@ class TestSessionUpload:
         capsule_bytes = _make_capsule_bytes()
         resp = await client.post(
             f"/api/v1/workspaces/{workspace_id}/sessions",
-            files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+            files={
+                "file": (
+                    "test.capsule",
+                    io.BytesIO(capsule_bytes),
+                    "application/octet-stream",
+                )
+            },
             data={"metadata": "{}"},
         )
         assert resp.status_code == 401
@@ -382,11 +437,22 @@ class TestSessionStats:
     async def test_stats_after_uploads(self, client, auth_headers, workspace_id):
         ok = str(uuid.uuid4())
         bad = str(uuid.uuid4())
-        await _upload_capsule(client, workspace_id, auth_headers, ok,
-                              _make_capsule_with_usage(ok, cost=0.10, in_tok=10, out_tok=5))
-        await _upload_capsule(client, workspace_id, auth_headers, bad,
-                              _make_capsule_with_usage(bad, status="failed",
-                                                       error={"type": "E", "message": "m"}))
+        await _upload_capsule(
+            client,
+            workspace_id,
+            auth_headers,
+            ok,
+            _make_capsule_with_usage(ok, cost=0.10, in_tok=10, out_tok=5),
+        )
+        await _upload_capsule(
+            client,
+            workspace_id,
+            auth_headers,
+            bad,
+            _make_capsule_with_usage(
+                bad, status="failed", error={"type": "E", "message": "m"}
+            ),
+        )
         resp = await client.get(
             f"/api/v1/workspaces/{workspace_id}/sessions/stats?days=7",
             headers=auth_headers,
@@ -400,7 +466,9 @@ class TestSessionStats:
         assert len(data["daily"]) == 7
         assert sum(d["count"] for d in data["daily"]) == 2
 
-    async def test_stats_route_not_shadowed_by_session_id(self, client, auth_headers, workspace_id):
+    async def test_stats_route_not_shadowed_by_session_id(
+        self, client, auth_headers, workspace_id
+    ):
         resp = await client.get(
             f"/api/v1/workspaces/{workspace_id}/sessions/stats", headers=auth_headers
         )
@@ -446,13 +514,25 @@ class TestSessionEvents:
         sid = str(uuid.uuid4())
         events = [{"type": "tool_call", "step": 0}, {"type": "llm_response", "step": 1}]
         capsule_bytes = _make_capsule_with_events(sid, events)
-        metadata = json.dumps({
-            "session_id": sid, "agent_name": "test-agent", "agent_version": "1.0.0",
-            "tags": [], "user_metadata": {}, "auto_redact": False,
-        })
+        metadata = json.dumps(
+            {
+                "session_id": sid,
+                "agent_name": "test-agent",
+                "agent_version": "1.0.0",
+                "tags": [],
+                "user_metadata": {},
+                "auto_redact": False,
+            }
+        )
         await client.post(
             f"/api/v1/workspaces/{workspace_id}/sessions",
-            files={"file": ("test.capsule", io.BytesIO(capsule_bytes), "application/octet-stream")},
+            files={
+                "file": (
+                    "test.capsule",
+                    io.BytesIO(capsule_bytes),
+                    "application/octet-stream",
+                )
+            },
             data={"metadata": metadata},
             headers=auth_headers,
         )
@@ -516,7 +596,9 @@ class TestSessionReplay:
         )
         assert resp.status_code == 404
 
-    async def test_replay_large_session_returns_error(self, client, auth_headers, workspace_id):
+    async def test_replay_large_session_returns_error(
+        self, client, auth_headers, workspace_id
+    ):
         """Sessions with >=30 steps cannot be replayed locally without Modal."""
         sid = str(uuid.uuid4())
         cap = _make_capsule_with_steps(sid, step_count=35)
@@ -537,7 +619,7 @@ def _fake_cloud_session(sid: str) -> CloudSession:
         id=sid,
         workspace_id="wsid",
         agent_name="agent",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         step_count=1,
         storage_path=f"wsid/{sid}.capsule",
         storage_size_bytes=10,
@@ -558,20 +640,26 @@ class TestLocalReplayErrorPaths:
         monkeypatch.setattr(_storage, "download", _raise_not_found)
 
         session = _fake_cloud_session("sid")
-        status_str, error, result = await _local_replay(session, TriggerReplayRequest(mode="cassette"))
+        status_str, error, result = await _local_replay(
+            session, TriggerReplayRequest(mode="cassette")
+        )
 
         assert status_str == "error"
         assert "not found" in error.lower()
         assert result is None
 
-    async def test_storage_download_generic_failure_returns_error_status(self, monkeypatch):
+    async def test_storage_download_generic_failure_returns_error_status(
+        self, monkeypatch
+    ):
         async def _raise_generic(path):
             raise ConnectionError("storage backend unreachable")
 
         monkeypatch.setattr(_storage, "download", _raise_generic)
 
         session = _fake_cloud_session("sid2")
-        status_str, error, result = await _local_replay(session, TriggerReplayRequest(mode="cassette"))
+        status_str, error, result = await _local_replay(
+            session, TriggerReplayRequest(mode="cassette")
+        )
 
         assert status_str == "error"
         assert "failed to download" in error.lower()
@@ -585,7 +673,7 @@ class TestLocalReplayErrorPaths:
 
         async def _raise_timeout(coro, *args, **kwargs):
             coro.close()  # avoid a "coroutine was never awaited" warning
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         monkeypatch.setattr(asyncio, "wait_for", _raise_timeout)
 
@@ -601,10 +689,14 @@ class TestLocalReplayErrorPaths:
         async def _fake_create_subprocess_exec(*args, **kwargs):
             return _FakeProc()
 
-        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+        monkeypatch.setattr(
+            asyncio, "create_subprocess_exec", _fake_create_subprocess_exec
+        )
 
         session = _fake_cloud_session("sid3")
-        status_str, error, result = await _local_replay(session, TriggerReplayRequest(mode="cassette"))
+        status_str, error, result = await _local_replay(
+            session, TriggerReplayRequest(mode="cassette")
+        )
 
         assert status_str == "error"
         assert "timed out" in error.lower()
@@ -612,12 +704,16 @@ class TestLocalReplayErrorPaths:
 
 
 class TestStorageQuota:
-    async def test_upload_rejected_when_storage_quota_exceeded(self, client, auth_headers, workspace_id):
+    async def test_upload_rejected_when_storage_quota_exceeded(
+        self, client, auth_headers, workspace_id
+    ):
         """Storage quota is enforced independently of the (disabled)
         per-file plan-tier size limit."""
         session_factory = get_session_factory()
         async with session_factory() as db:
-            result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            result = await db.execute(
+                select(Workspace).where(Workspace.id == workspace_id)
+            )
             ws = result.scalars().first()
             ws.storage_quota_bytes = 10  # smaller than any real capsule upload
             await db.commit()
@@ -665,8 +761,12 @@ class TestSessionListFilters:
     async def test_filter_by_agent_name(self, client, auth_headers, workspace_id):
         sid_a = str(uuid.uuid4())
         sid_b = str(uuid.uuid4())
-        await _upload_with_agent(client, workspace_id, auth_headers, sid_a, "agent-alpha")
-        await _upload_with_agent(client, workspace_id, auth_headers, sid_b, "agent-beta")
+        await _upload_with_agent(
+            client, workspace_id, auth_headers, sid_a, "agent-alpha"
+        )
+        await _upload_with_agent(
+            client, workspace_id, auth_headers, sid_b, "agent-beta"
+        )
         resp = await client.get(
             f"/api/v1/workspaces/{workspace_id}/sessions?agent_name=agent-alpha",
             headers=auth_headers,
@@ -679,7 +779,9 @@ class TestSessionListFilters:
 
     async def test_filter_by_status(self, client, auth_headers, workspace_id):
         sid = str(uuid.uuid4())
-        cap = _make_capsule_with_usage(sid, status="failed", error={"type": "E", "message": "m"})
+        cap = _make_capsule_with_usage(
+            sid, status="failed", error={"type": "E", "message": "m"}
+        )
         await _upload_capsule(client, workspace_id, auth_headers, sid, cap)
         resp = await client.get(
             f"/api/v1/workspaces/{workspace_id}/sessions?status=failed",
@@ -694,7 +796,9 @@ class TestSessionListFilters:
 
     async def test_pagination_limit(self, client, auth_headers, workspace_id):
         for _ in range(3):
-            await _upload_with_agent(client, workspace_id, auth_headers, str(uuid.uuid4()))
+            await _upload_with_agent(
+                client, workspace_id, auth_headers, str(uuid.uuid4())
+            )
         resp = await client.get(
             f"/api/v1/workspaces/{workspace_id}/sessions?limit=2",
             headers=auth_headers,

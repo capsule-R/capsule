@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Sequence
-from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
+from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 import structlog
 from fastapi import FastAPI, Request
@@ -19,7 +19,14 @@ from slowapi.errors import RateLimitExceeded
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import create_tables
 from capsule_cloud.rate_limit import limiter
-from capsule_cloud.routers import api_keys, auth, branches, replays, sessions, workspaces
+from capsule_cloud.routers import (
+    api_keys,
+    auth,
+    branches,
+    replays,
+    sessions,
+    workspaces,
+)
 from capsule_cloud.schemas import HealthResponse, ProblemDetail
 
 logger = structlog.get_logger(__name__)
@@ -32,20 +39,27 @@ def _sanitize_pydantic_errors(errors: Sequence[Any]) -> list[dict[str, Any]]:
     reach a response body or a log that captures response bodies. Both can
     embed the raw submitted value — e.g. a too-short-password error's
     "input" field IS the password itself."""
-    return [{k: v for k, v in err.items() if k not in ("input", "ctx")} for err in errors]
+    return [
+        {k: v for k, v in err.items() if k not in ("input", "ctx")} for err in errors
+    ]
 
 
 # ── Lifespan ──────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
-    logger.info("capsule_cloud.startup", environment=settings.environment, version=__version__)
+    logger.info(
+        "capsule_cloud.startup", environment=settings.environment, version=__version__
+    )
     # Surface Modal replay config at boot (never log the secret values themselves)
     # so it's obvious in Railway logs whether cloud replay is wired up.
     logger.info(
         "capsule_cloud.modal_config",
-        modal_token_configured=bool(settings.modal_token_id and settings.modal_token_secret),
+        modal_token_configured=bool(
+            settings.modal_token_id and settings.modal_token_secret
+        ),
         writeback_db_direct_set=bool(settings.database_url_direct),
     )
     await create_tables()
@@ -54,6 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 # ── App factory ───────────────────────────────────────────────
+
 
 def create_app() -> FastAPI:
     settings = get_settings()
@@ -96,8 +111,12 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-XSS-Protection", "1; mode=block")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
         return response
 
     # ── Request-ID + latency logging middleware ───────────────
@@ -128,7 +147,9 @@ def create_app() -> FastAPI:
             content=ProblemDetail(
                 title="Not Found",
                 status=404,
-                detail=str(exc.detail) if hasattr(exc, "detail") else "Resource not found",
+                detail=str(exc.detail)
+                if hasattr(exc, "detail")
+                else "Resource not found",
                 instance=str(request.url),
                 request_id=getattr(request.state, "request_id", None),
             ).model_dump(),
@@ -174,10 +195,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(500)
     async def internal_error_handler(request: Request, exc):  # type: ignore[no-untyped-def]
-        try:
+        with suppress(Exception):  # Don't let logging failure cascade
             logger.error("unhandled_exception", error=str(exc))
-        except Exception:
-            pass  # Don't let logging failure cascade
         return JSONResponse(
             status_code=500,
             content=ProblemDetail(

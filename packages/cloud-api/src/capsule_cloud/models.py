@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     BigInteger,
@@ -21,7 +21,7 @@ from capsule_cloud.database import Base
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class User(Base):
@@ -32,7 +32,7 @@ class User(Base):
     email_verified_at = Column(DateTime(timezone=True))
     full_name = Column(String)
     avatar_url = Column(String)
-    hashed_password = Column(String)          # null for OAuth users
+    hashed_password = Column(String)  # null for OAuth users
     auth_provider = Column(String, nullable=False, default="email")
     auth_provider_id = Column(String)
     # Bulk refresh-token revocation: any refresh token whose `iat` predates
@@ -40,10 +40,14 @@ class User(Base):
     # individually. Set on password change/reset.
     refresh_tokens_valid_after = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
     deleted_at = Column(DateTime(timezone=True))
 
-    workspaces_owned = relationship("Workspace", back_populates="owner", foreign_keys="[Workspace.owner_id]")
+    workspaces_owned = relationship(
+        "Workspace", back_populates="owner", foreign_keys="[Workspace.owner_id]"
+    )
     memberships = relationship("WorkspaceMember", back_populates="user")
 
 
@@ -58,14 +62,20 @@ class Workspace(Base):
     stripe_customer_id = Column(String)
     stripe_subscription_id = Column(String)
     retention_days = Column(Integer, nullable=False, default=30)
-    storage_quota_bytes = Column(BigInteger, nullable=False, default=1 * 1024 * 1024 * 1024)
+    storage_quota_bytes = Column(
+        BigInteger, nullable=False, default=1 * 1024 * 1024 * 1024
+    )
     storage_used_bytes = Column(BigInteger, nullable=False, default=0)
     settings_json = Column(Text, nullable=False, default="{}")
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
     deleted_at = Column(DateTime(timezone=True))
 
-    owner = relationship("User", back_populates="workspaces_owned", foreign_keys=[owner_id])
+    owner = relationship(
+        "User", back_populates="workspaces_owned", foreign_keys=[owner_id]
+    )
     members = relationship("WorkspaceMember", back_populates="workspace")
     sessions = relationship("Session", back_populates="workspace")
     api_keys = relationship("ApiKey", back_populates="workspace")
@@ -76,7 +86,9 @@ class WorkspaceMember(Base):
     __table_args__ = (UniqueConstraint("workspace_id", "user_id"),)
 
     id = Column(String, primary_key=True)
-    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role = Column(String, nullable=False, default="member")  # owner|admin|member|viewer
     invited_at = Column(DateTime(timezone=True))
@@ -90,8 +102,10 @@ class WorkspaceMember(Base):
 class Session(Base):
     __tablename__ = "cloud_sessions"
 
-    id = Column(String, primary_key=True)       # SDK-provided session ID
-    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String, primary_key=True)  # SDK-provided session ID
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     agent_name = Column(String, nullable=False)
     agent_version = Column(String)
     started_at = Column(DateTime(timezone=True), nullable=False)
@@ -122,10 +136,12 @@ class ApiKey(Base):
     __tablename__ = "api_keys"
 
     id = Column(String, primary_key=True)
-    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     name = Column(String, nullable=False)
-    key_prefix = Column(String, nullable=False)   # first 8 chars for display
-    key_hash = Column(String, nullable=False)     # argon2 hash
+    key_prefix = Column(String, nullable=False)  # first 8 chars for display
+    key_hash = Column(String, nullable=False)  # argon2 hash
     created_by_id = Column(String, ForeignKey("users.id"), nullable=False)
     last_used_at = Column(DateTime(timezone=True))
     expires_at = Column(DateTime(timezone=True))
@@ -143,7 +159,9 @@ class RevokedToken(Base):
     __tablename__ = "revoked_tokens"
 
     jti = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
@@ -157,23 +175,39 @@ class Replay(Base):
     __tablename__ = "replays"
 
     id = Column(String, primary_key=True)
-    session_id = Column(String, ForeignKey("cloud_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
-    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = Column(
+        String,
+        ForeignKey("cloud_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workspace_id = Column(
+        String,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     mode = Column(String, nullable=False, default="cassette")
     branch_from_step = Column(Integer)
-    status = Column(String, nullable=False, default="queued")  # queued|running|completed|error
-    result_json = Column(Text)   # set once a real result is known
+    status = Column(
+        String, nullable=False, default="queued"
+    )  # queued|running|completed|error
+    result_json = Column(Text)  # set once a real result is known
     error_message = Column(Text)
     created_by_id = Column(String, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
 
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(String, primary_key=True)
-    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     actor_user_id = Column(String, ForeignKey("users.id"))
     actor_api_key_id = Column(String, ForeignKey("api_keys.id"))
     actor_ip_address = Column(String)

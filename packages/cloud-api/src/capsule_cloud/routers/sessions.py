@@ -2,25 +2,40 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import io
 import json
 import re
 import tarfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import ulid
 import zstandard as zstd
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from capsule_cloud.auth import get_current_principal, get_current_user, get_workspace_member
+from capsule_cloud import storage as _storage
+from capsule_cloud.auth import (
+    get_current_principal,
+    get_current_user,
+    get_workspace_member,
+)
 from capsule_cloud.config import get_settings
 from capsule_cloud.database import get_db
-from capsule_cloud import storage as _storage
-from capsule_cloud.models import Replay, Session as CloudSession, User, Workspace
+from capsule_cloud.models import Replay, User, Workspace
+from capsule_cloud.models import Session as CloudSession
 from capsule_cloud.schemas import (
     BranchCreateRequest,
     BranchCreateResponse,
@@ -56,11 +71,14 @@ async def _get_workspace_or_404(workspace_id: str, db: AsyncSession) -> Workspac
     )
     ws = result.scalars().first()
     if ws is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     return ws
 
 
 # ── Upload ────────────────────────────────────────────────────
+
 
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def upload_session(
@@ -81,7 +99,7 @@ async def upload_session(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid metadata JSON: {exc}",
-        )
+        ) from exc
 
     raw = await file.read()
     file_size = len(raw)
@@ -177,14 +195,14 @@ async def upload_session(
 
     # Retention
     retention_days = ws.retention_days
-    expires_at = datetime.now(timezone.utc) + timedelta(days=retention_days)
+    expires_at = datetime.now(UTC) + timedelta(days=retention_days)
 
     cloud_session = CloudSession(
         id=meta.session_id,
         workspace_id=workspace_id,
         agent_name=meta.agent_name,
         agent_version=meta.agent_version,
-        started_at=started_at or datetime.now(timezone.utc),
+        started_at=started_at or datetime.now(UTC),
         ended_at=ended_at,
         duration_ms=duration_ms,
         status=status_val,
@@ -227,6 +245,7 @@ async def upload_session(
 
 # ── List ──────────────────────────────────────────────────────
 
+
 @router.get("", response_model=SessionListResponse)
 async def list_sessions(
     workspace_id: str,
@@ -249,9 +268,7 @@ async def list_sessions(
         query = query.where(CloudSession.status == status)
 
     # Get total count
-    count_result = await db.execute(
-        select(func.count()).select_from(query.subquery())
-    )
+    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar() or 0
 
     query = query.order_by(CloudSession.uploaded_at.desc())
@@ -287,6 +304,7 @@ async def list_sessions(
 
 # ── Stats ─────────────────────────────────────────────────────
 # NOTE: declared BEFORE "/{session_id}" so the literal path wins routing.
+
 
 @router.get("/stats", response_model=SessionStatsResponse)
 async def session_stats(
@@ -345,19 +363,23 @@ async def session_stats(
     ).scalar() or 0
 
     # Daily buckets — DB-agnostic: fetch timestamps in range and bucket in Python.
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = (now - timedelta(days=days - 1)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
     rows = (
-        await db.execute(
-            select(CloudSession.uploaded_at).where(
-                CloudSession.workspace_id == workspace_id,
-                CloudSession.deleted_at.is_(None),
-                CloudSession.uploaded_at >= start,
+        (
+            await db.execute(
+                select(CloudSession.uploaded_at).where(
+                    CloudSession.workspace_id == workspace_id,
+                    CloudSession.deleted_at.is_(None),
+                    CloudSession.uploaded_at >= start,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     buckets: dict[str, int] = {
         (start + timedelta(days=i)).date().isoformat(): 0 for i in range(days)
@@ -367,10 +389,7 @@ async def session_stats(
             continue
         # Normalise to UTC — asyncpg returns timezone-aware datetimes; aiosqlite
         # may return naive ones. Either way we want the UTC calendar date.
-        if ts.tzinfo is not None:
-            ts_utc = ts.astimezone(timezone.utc)
-        else:
-            ts_utc = ts.replace(tzinfo=timezone.utc)
+        ts_utc = ts.astimezone(UTC) if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
         key = ts_utc.date().isoformat()
         if key in buckets:
             buckets[key] += 1
@@ -390,6 +409,7 @@ async def session_stats(
 
 # ── Get ───────────────────────────────────────────────────────
 
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
     workspace_id: str,
@@ -408,25 +428,33 @@ async def get_session(
 
 # ── Delete ────────────────────────────────────────────────────
 
-@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+
+@router.delete(
+    "/{session_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_session(
     workspace_id: str,
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin", "member"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin", "member"]
+    )
     session = await _get_session_or_404(workspace_id, session_id, db)
-    session.deleted_at = datetime.now(timezone.utc)
+    session.deleted_at = datetime.now(UTC)
     # reclaim storage
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     ws = result.scalars().first()
     if ws:
-        ws.storage_used_bytes = max(0, ws.storage_used_bytes - session.storage_size_bytes)
+        ws.storage_used_bytes = max(
+            0, ws.storage_used_bytes - session.storage_size_bytes
+        )
     await db.commit()
 
 
 # ── Events ────────────────────────────────────────────────────
+
 
 @router.get("/{session_id}/events", response_model=list[dict])
 async def get_session_events(
@@ -445,12 +473,12 @@ async def get_session_events(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session binary data not found in storage.",
-        )
+        ) from None
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Storage error: {exc}",
-        )
+        ) from exc
 
     try:
         dctx = zstd.ZstdDecompressor()
@@ -481,7 +509,9 @@ async def get_session_events(
         events.sort(key=lambda x: x[0])
         return [e[1] for e in events]
 
+
 # ── Download ──────────────────────────────────────────────────
+
 
 @router.get("/{session_id}/download")
 async def download_session(
@@ -500,15 +530,15 @@ async def download_session(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session binary data not found in storage.",
-        )
+        ) from None
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Storage error: {exc}",
-        )
+        ) from exc
 
     # Strip any characters that could break the Content-Disposition header value
-    safe_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', session_id)
+    safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", session_id)
     return Response(
         content=raw,
         media_type="application/octet-stream",
@@ -520,6 +550,7 @@ async def download_session(
 
 
 # ── Replay ───────────────────────────────────────────────────
+
 
 async def _local_replay(
     session: CloudSession,
@@ -560,7 +591,7 @@ async def _local_replay(
         )
         try:
             stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.communicate()
             return "error", "Local replay timed out after 120 seconds", None
@@ -569,7 +600,11 @@ async def _local_replay(
         stderr = stderr_b.decode(errors="replace")[-2000:]
 
         if proc.returncode != 0:
-            return "error", stderr or f"capsule replay exited with code {proc.returncode}", None
+            return (
+                "error",
+                stderr or f"capsule replay exited with code {proc.returncode}",
+                None,
+            )
 
         # Parse the CLI's real verdict — never assume determinism from a
         # zero exit code alone (the process can exit 0 having found a
@@ -579,24 +614,34 @@ async def _local_replay(
         except (json.JSONDecodeError, ValueError) as exc:
             return "error", f"Could not parse replay output as JSON: {exc}", None
 
-        return "completed", None, {
-            "is_deterministic": parsed.get("is_deterministic"),
-            "integrity_ok": parsed.get("integrity_ok"),
-            "replayed_steps": parsed.get("replayed_steps"),
-            "original_steps": parsed.get("original_steps"),
-        }
+        return (
+            "completed",
+            None,
+            {
+                "is_deterministic": parsed.get("is_deterministic"),
+                "integrity_ok": parsed.get("integrity_ok"),
+                "replayed_steps": parsed.get("replayed_steps"),
+                "original_steps": parsed.get("original_steps"),
+            },
+        )
     except FileNotFoundError:
-        return "error", "capsule-trace CLI not found — install capsule-trace in the API server environment", None
+        return (
+            "error",
+            "capsule-trace CLI not found — install capsule-trace in the API server environment",
+            None,
+        )
     except Exception as exc:
         return "error", str(exc), None
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path)
-        except OSError:
-            pass
 
 
-@router.post("/{session_id}/replay", response_model=ReplayResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{session_id}/replay",
+    response_model=ReplayResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def trigger_replay(
     workspace_id: str,
     session_id: str,
@@ -617,6 +662,7 @@ async def trigger_replay(
     settings = get_settings()
 
     import structlog as _structlog
+
     _log = _structlog.get_logger(__name__)
 
     replay_error: str | None = None
@@ -635,7 +681,9 @@ async def trigger_replay(
                 replay_id=replay_id,
                 app="capsule-replay",
                 function="run_replay",
-                writeback_db_scheme=worker_db_url.split("://")[0] if "://" in worker_db_url else "?",
+                writeback_db_scheme=worker_db_url.split("://")[0]
+                if "://" in worker_db_url
+                else "?",
             )
             run_replay = modal.Function.from_name("capsule-replay", "run_replay")
             await run_replay.spawn.aio(
@@ -664,7 +712,9 @@ async def trigger_replay(
     else:
         step_count = session.step_count or 0
         if step_count < 30:
-            replay_status, replay_error, replay_result = await _local_replay(session, body)
+            replay_status, replay_error, replay_result = await _local_replay(
+                session, body
+            )
         else:
             replay_status = "error"
             replay_error = (
@@ -702,6 +752,7 @@ async def trigger_replay(
 
 # ── Branch ───────────────────────────────────────────────────
 
+
 @router.post(
     "/{session_id}/branch",
     response_model=BranchCreateResponse,
@@ -726,27 +777,32 @@ async def create_branch(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"from_step {body.from_step} is out of range "
-                   f"(session has {session.step_count} steps)",
+            f"(session has {session.step_count} steps)",
         )
 
     from capsule_cloud.routers.branches import BRANCH_STORE
 
     branch_id = str(ulid.new())
-    BRANCH_STORE.setdefault(workspace_id, []).append({
-        "id": branch_id,
-        "session_id": session_id,
-        "from_step": body.from_step,
-        "note": body.note,
-        "status": "created",
-        "created_by": current_user.id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    BRANCH_STORE.setdefault(workspace_id, []).append(
+        {
+            "id": branch_id,
+            "session_id": session_id,
+            "from_step": body.from_step,
+            "note": body.note,
+            "status": "created",
+            "created_by": current_user.id,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+    )
     return BranchCreateResponse(branch_id=branch_id)
 
 
 # ── Helpers ───────────────────────────────────────────────────
 
-async def _get_session_or_404(workspace_id: str, session_id: str, db: AsyncSession) -> CloudSession:
+
+async def _get_session_or_404(
+    workspace_id: str, session_id: str, db: AsyncSession
+) -> CloudSession:
     result = await db.execute(
         select(CloudSession).where(
             CloudSession.id == session_id,
@@ -756,16 +812,16 @@ async def _get_session_or_404(workspace_id: str, session_id: str, db: AsyncSessi
     )
     session = result.scalars().first()
     if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
     return session
 
 
 def _to_response(session: CloudSession) -> SessionResponse:
     tags: list[str] = []
-    try:
+    with contextlib.suppress(Exception):
         tags = json.loads(session.tags_json)
-    except Exception:
-        pass
     return SessionResponse(
         id=session.id,
         workspace_id=session.workspace_id,

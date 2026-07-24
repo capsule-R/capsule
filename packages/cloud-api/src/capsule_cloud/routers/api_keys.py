@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,7 +25,9 @@ async def create_api_key(
     db: AsyncSession = Depends(get_db),
 ) -> ApiKeyResponse:
     """Create a new API key for the workspace. The full key is only returned once."""
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin"]
+    )
 
     full_key, key_prefix, key_hash = generate_api_key()
 
@@ -61,7 +63,9 @@ async def list_api_keys(
     db: AsyncSession = Depends(get_db),
 ) -> list[ApiKeyResponse]:
     """List all active API keys for the workspace."""
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin"]
+    )
 
     result = await db.execute(
         select(ApiKey)
@@ -95,7 +99,9 @@ async def revoke_api_key(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Revoke (soft-delete) an API key."""
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin"]
+    )
 
     result = await db.execute(
         select(ApiKey).where(
@@ -106,7 +112,9 @@ async def revoke_api_key(
     )
     api_key = result.scalars().first()
     if api_key is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
+        )
 
-    api_key.revoked_at = datetime.now(timezone.utc)
+    api_key.revoked_at = datetime.now(UTC)
     await db.commit()

@@ -5,11 +5,14 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt as pyjwt
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+from cryptography.hazmat.primitives.serialization import (
+    load_pem_private_key,
+    load_pem_public_key,
+)
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
@@ -34,6 +37,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ── API key generation and hashing ───────────────────────────
+
 
 def generate_api_key() -> tuple[str, str, str]:
     """Returns (full_key, key_prefix, key_hash).
@@ -83,7 +87,7 @@ def _create_token(
     expires_delta: timedelta,
 ) -> str:
     payload = dict(data)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload.update(
         {
             "iat": now,
@@ -125,12 +129,12 @@ def _decode_token_payload(token: str, expected_type: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
-        )
+        ) from None
     except pyjwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
-        )
+        ) from None
     if payload.get("type") != expected_type:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -171,7 +175,9 @@ async def get_current_user(
     )
     user = result.scalars().first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
     return user
 
 
@@ -186,29 +192,38 @@ async def get_current_user_from_refresh(
     change/reset (see revoke_all_refresh_tokens).
     """
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
     payload = _decode_token_payload(credentials.credentials, _REFRESH_TOKEN_TYPE)
     user_id: str = payload["sub"]
     jti: str | None = payload.get("jti")
 
     if jti and await _is_refresh_token_revoked(jti, db):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked"
+        )
 
     result = await db.execute(
         select(User).where(User.id == user_id, User.deleted_at.is_(None))
     )
     user = result.scalars().first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
 
     if user.refresh_tokens_valid_after is not None:
         iat = payload.get("iat")
-        issued_at = datetime.fromtimestamp(iat, tz=timezone.utc) if iat else None
+        issued_at = datetime.fromtimestamp(iat, tz=UTC) if iat else None
         valid_after = user.refresh_tokens_valid_after
         if valid_after.tzinfo is None:
-            valid_after = valid_after.replace(tzinfo=timezone.utc)
+            valid_after = valid_after.replace(tzinfo=UTC)
         if issued_at is None or issued_at < valid_after:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+            )
 
     return user
 
@@ -246,7 +261,7 @@ async def revoke_refresh_token(token: str, db: AsyncSession) -> None:
         RevokedToken(
             jti=jti,
             user_id=user_id,
-            expires_at=datetime.fromtimestamp(exp, tz=timezone.utc),
+            expires_at=datetime.fromtimestamp(exp, tz=UTC),
         )
     )
     await db.commit()
@@ -266,7 +281,7 @@ def revoke_all_refresh_tokens(user: User) -> None:
     Does not commit; the caller should commit alongside its own changes
     (e.g. the new password hash) in one transaction.
     """
-    user.refresh_tokens_valid_after = datetime.now(timezone.utc).replace(microsecond=0)
+    user.refresh_tokens_valid_after = datetime.now(UTC).replace(microsecond=0)
 
 
 async def get_workspace_member(
@@ -284,9 +299,13 @@ async def get_workspace_member(
     )
     member = result.scalars().first()
     if member is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     if required_roles and member.role not in required_roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     return member
 
 
@@ -303,9 +322,11 @@ async def authenticate_api_key(
     who may belong to (and could then act on) other workspaces too.
     """
     if credentials is None or not credentials.credentials.startswith("csk_"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
+        )
     key_hash = hash_api_key(credentials.credentials)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(ApiKey).where(
             ApiKey.key_hash == key_hash,
@@ -315,11 +336,15 @@ async def authenticate_api_key(
     )
     api_key = result.scalars().first()
     if api_key is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired API key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired API key",
+        )
     api_key.last_used_at = now
     await db.commit()
 
     from capsule_cloud.models import Workspace
+
     ws_result = await db.execute(
         select(Workspace).where(
             Workspace.id == api_key.workspace_id, Workspace.deleted_at.is_(None)
@@ -327,14 +352,19 @@ async def authenticate_api_key(
     )
     workspace = ws_result.scalars().first()
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key workspace not found",
+        )
 
     user_result = await db.execute(
         select(User).where(User.id == workspace.owner_id, User.deleted_at.is_(None))
     )
     user = user_result.scalars().first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key owner not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="API key owner not found"
+        )
     return user, api_key
 
 
@@ -375,5 +405,7 @@ async def get_current_principal(
     )
     user = result.scalars().first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
     return user
