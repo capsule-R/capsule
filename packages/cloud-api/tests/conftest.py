@@ -53,6 +53,12 @@ async def client(tmp_path):
             yield c
     finally:
         del os.environ["DATABASE_URL"]
+        # Dispose the per-test engine's pooled aiosqlite connections while its
+        # own event loop is still alive — otherwise they get garbage-collected
+        # after pytest-asyncio closes the loop, and cleanup fails with
+        # "Event loop is closed".
+        if dbmod._engine is not None:
+            await dbmod._engine.dispose()
         cfg._settings = old_settings
         dbmod._engine = old_engine
         dbmod._session_factory = old_factory
