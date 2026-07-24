@@ -24,15 +24,12 @@ import modal
 # for writing the result back to the replays table.
 # NOTE: the PyPI package is "capsule-trace" (see packages/sdk/pyproject.toml);
 # "capsule-sdk" is not a real package and would fail to install.
-_image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .pip_install(
-        "capsule-trace>=0.1.0",
-        "aiobotocore[boto3]>=2.13.0",
-        "zstandard>=0.22.0",
-        "sqlalchemy>=2.0.0",
-        "asyncpg>=0.29.0",
-    )
+_image = modal.Image.debian_slim(python_version="3.11").pip_install(
+    "capsule-trace>=0.1.0",
+    "aiobotocore[boto3]>=2.13.0",
+    "zstandard>=0.22.0",
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
 )
 
 app = modal.App("capsule-replay", image=_image)
@@ -48,10 +45,12 @@ async def _download(
     """Download a .capsule file from B2/R2 or local disk."""
     if not endpoint:
         import os
+
         path = os.path.join(os.getcwd(), "data", "storage", key)
         with open(path, "rb") as f:
             return f.read()
     import aiobotocore.session  # type: ignore[import-untyped]
+
     session = aiobotocore.session.get_session()
     async with session.create_client(
         "s3",
@@ -97,7 +96,9 @@ async def _write_result(
                     ),
                     {
                         "status": status,
-                        "result_json": _json.dumps(result) if result is not None else None,
+                        "result_json": _json.dumps(result)
+                        if result is not None
+                        else None,
                         "error_message": error,
                         "id": replay_id,
                     },
@@ -163,11 +164,19 @@ def _prepare_async_url(database_url: str) -> tuple[str, dict]:
 
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k.lower() not in ("sslmode", "ssl")]
+    kept = [
+        (k, v)
+        for k, v in parse_qsl(parsed.query)
+        if k.lower() not in ("sslmode", "ssl")
+    ]
     url = urlunparse(parsed._replace(query=urlencode(kept)))
 
     connect_args: dict = {}
-    if host and not host.endswith(".railway.internal") and host not in ("localhost", "127.0.0.1"):
+    if (
+        host
+        and not host.endswith(".railway.internal")
+        and host not in ("localhost", "127.0.0.1")
+    ):
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -249,7 +258,10 @@ async def run_replay(
 
         if proc.returncode != 0:
             return await _finish(
-                "error", None, proc.stderr[-2000:] or f"capsule replay exited with code {proc.returncode}"
+                "error",
+                None,
+                proc.stderr[-2000:]
+                or f"capsule replay exited with code {proc.returncode}",
             )
 
         # The CLI prints a human "Replaying …" status line to stdout before the

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -23,6 +25,7 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 # ── Workspace CRUD ────────────────────────────────────────────
 
+
 @router.get("", response_model=list[WorkspaceResponse])
 async def list_workspaces(
     current_user: User = Depends(get_current_user),
@@ -35,7 +38,9 @@ async def list_workspaces(
     memberships = result.scalars().all()
     workspace_ids = [m.workspace_id for m in memberships]
     result = await db.execute(
-        select(Workspace).where(Workspace.id.in_(workspace_ids), Workspace.deleted_at.is_(None))
+        select(Workspace).where(
+            Workspace.id.in_(workspace_ids), Workspace.deleted_at.is_(None)
+        )
     )
     return list(result.scalars().all())
 
@@ -89,7 +94,9 @@ async def get_workspace(
     )
     workspace = result.scalars().first()
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     return workspace
 
 
@@ -100,7 +107,9 @@ async def update_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Workspace:
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin"]
+    )
     result = await db.execute(
         select(Workspace).where(
             Workspace.id == workspace_id, Workspace.deleted_at.is_(None)
@@ -108,7 +117,9 @@ async def update_workspace(
     )
     workspace = result.scalars().first()
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
     if body.name is not None:
         workspace.name = body.name
     await db.commit()
@@ -116,7 +127,9 @@ async def update_workspace(
     return workspace
 
 
-@router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
@@ -130,13 +143,17 @@ async def delete_workspace(
     )
     workspace = result.scalars().first()
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
-    from datetime import datetime, timezone
-    workspace.deleted_at = datetime.now(timezone.utc)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+        )
+    from datetime import datetime
+
+    workspace.deleted_at = datetime.now(UTC)
     await db.commit()
 
 
 # ── Members ───────────────────────────────────────────────────
+
 
 @router.get("/{workspace_id}/members", response_model=list[MemberResponse])
 async def list_members(
@@ -163,7 +180,9 @@ async def invite_member(
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceMember:
     """Invite a user to the workspace by email."""
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin"]
+    )
 
     result = await db.execute(select(User).where(User.email == str(body.email)))
     invitee = result.scalars().first()
@@ -186,13 +205,14 @@ async def invite_member(
             detail="User is already a member of this workspace",
         )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     member = WorkspaceMember(
         id=str(ulid.new()),
         workspace_id=workspace_id,
         user_id=invitee.id,
         role=body.role,
-        invited_at=datetime.now(timezone.utc),
+        invited_at=datetime.now(UTC),
     )
     db.add(member)
     await db.commit()
@@ -211,7 +231,9 @@ async def remove_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await get_workspace_member(workspace_id, current_user, db, required_roles=["owner", "admin"])
+    await get_workspace_member(
+        workspace_id, current_user, db, required_roles=["owner", "admin"]
+    )
     result = await db.execute(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id,
@@ -220,10 +242,13 @@ async def remove_member(
     )
     member = result.scalars().first()
     if member is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
     if member.role == "owner":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove workspace owner"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove workspace owner",
         )
     await db.delete(member)
     await db.commit()

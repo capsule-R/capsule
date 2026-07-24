@@ -41,7 +41,9 @@ class TestSignup:
         )
         assert resp.status_code == 422
 
-    async def test_signup_validation_error_never_echoes_submitted_password(self, client):
+    async def test_signup_validation_error_never_echoes_submitted_password(
+        self, client
+    ):
         """P1: the 422 handler used to include Pydantic's "input" field
         verbatim — for a too-short password, that field IS the password
         itself, so it must not survive into the response body."""
@@ -102,13 +104,19 @@ class TestRateLimiting:
     async def test_login_rate_limited_after_5_per_minute(self, client):
         await client.post(
             "/api/v1/auth/signup",
-            json={"email": "ratelimit-login@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "ratelimit-login@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         statuses = []
         for _ in range(6):
             resp = await client.post(
                 "/api/v1/auth/login",
-                json={"email": "ratelimit-login@example.com", "password": "wrongpassword123"},
+                json={
+                    "email": "ratelimit-login@example.com",
+                    "password": "wrongpassword123",
+                },
             )
             statuses.append(resp.status_code)
         assert statuses[:5] == [401] * 5
@@ -148,7 +156,10 @@ class TestRateLimiting:
             )
         signup_resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "still-allowed@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "still-allowed@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         assert signup_resp.status_code == 201
 
@@ -158,14 +169,19 @@ class TestArgon2OffEventLoop:
     a burst of logins could stall every other request. Both must now go
     through anyio.to_thread.run_sync()."""
 
-    async def test_login_verifies_password_via_anyio_to_thread(self, client, monkeypatch):
+    async def test_login_verifies_password_via_anyio_to_thread(
+        self, client, monkeypatch
+    ):
         import anyio.to_thread
 
         from capsule_cloud.auth import verify_password
 
         await client.post(
             "/api/v1/auth/signup",
-            json={"email": "thread-check-login@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "thread-check-login@example.com",
+                "password": "supersecretpassword1",
+            },
         )
 
         calls = []
@@ -187,7 +203,9 @@ class TestArgon2OffEventLoop:
         assert resp.status_code == 200
         assert verify_password in calls
 
-    async def test_signup_hashes_password_via_anyio_to_thread(self, client, monkeypatch):
+    async def test_signup_hashes_password_via_anyio_to_thread(
+        self, client, monkeypatch
+    ):
         import anyio.to_thread
 
         from capsule_cloud.auth import hash_password
@@ -203,7 +221,10 @@ class TestArgon2OffEventLoop:
 
         resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "thread-check-signup@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "thread-check-signup@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         assert resp.status_code == 201
         assert hash_password in calls
@@ -273,7 +294,10 @@ class TestLogout:
         /auth/logout must actually stop working afterwards."""
         signup_resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "logout-revoke@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "logout-revoke@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         refresh_token = signup_resp.json()["refresh_token"]
 
@@ -337,7 +361,10 @@ class TestForgotPassword:
         existence — otherwise the endpoint is a user-enumeration oracle."""
         await client.post(
             "/api/v1/auth/signup",
-            json={"email": "enum-check@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "enum-check@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         resp_existing = await client.post(
             "/api/v1/auth/forgot-password",
@@ -356,12 +383,13 @@ class TestForgotPassword:
         import os
 
         import pytest
+        from pydantic import ValidationError
 
         from capsule_cloud.config import Settings
 
         old = os.environ.pop("ENVIRONMENT", None)
         try:
-            with pytest.raises(Exception):
+            with pytest.raises(ValidationError):
                 Settings(_env_file=None)
         finally:
             if old is not None:
@@ -427,7 +455,10 @@ class TestResetPassword:
     async def test_reset_password_expired_token_rejected(self, client):
         signup_resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "expired-reset@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "expired-reset@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         access_token = signup_resp.json()["access_token"]
         me_resp = await client.get(
@@ -452,7 +483,10 @@ class TestResetPassword:
         """An access token (not a password_reset token) must not work here."""
         signup_resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "wrong-type-reset@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "wrong-type-reset@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         access_token = signup_resp.json()["access_token"]
 
@@ -483,7 +517,10 @@ class TestResetPassword:
         account via password reset."""
         signup_resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "reset-revoke@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "reset-revoke@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         old_refresh_token = signup_resp.json()["refresh_token"]
         access_token = signup_resp.json()["access_token"]
@@ -532,7 +569,10 @@ class TestChangePassword:
     async def test_change_password_success(self, client, auth_headers):
         resp = await client.post(
             "/api/v1/auth/change-password",
-            json={"current_password": "supersecretpassword1", "new_password": "newpassword1234"},
+            json={
+                "current_password": "supersecretpassword1",
+                "new_password": "newpassword1234",
+            },
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -541,7 +581,10 @@ class TestChangePassword:
     async def test_change_password_wrong_current(self, client, auth_headers):
         resp = await client.post(
             "/api/v1/auth/change-password",
-            json={"current_password": "wrongpassword1", "new_password": "newpassword1234"},
+            json={
+                "current_password": "wrongpassword1",
+                "new_password": "newpassword1234",
+            },
             headers=auth_headers,
         )
         assert resp.status_code == 401
@@ -577,7 +620,10 @@ class TestChangePassword:
     async def test_change_password_unauthenticated(self, client):
         resp = await client.post(
             "/api/v1/auth/change-password",
-            json={"current_password": "supersecretpassword1", "new_password": "newpassword1234"},
+            json={
+                "current_password": "supersecretpassword1",
+                "new_password": "newpassword1234",
+            },
         )
         assert resp.status_code == 401
 
@@ -586,7 +632,10 @@ class TestChangePassword:
         moment the legitimate user changes their password."""
         signup_resp = await client.post(
             "/api/v1/auth/signup",
-            json={"email": "change-revoke@example.com", "password": "supersecretpassword1"},
+            json={
+                "email": "change-revoke@example.com",
+                "password": "supersecretpassword1",
+            },
         )
         access_token = signup_resp.json()["access_token"]
         old_refresh_token = signup_resp.json()["refresh_token"]
@@ -597,7 +646,10 @@ class TestChangePassword:
 
         change_resp = await client.post(
             "/api/v1/auth/change-password",
-            json={"current_password": "supersecretpassword1", "new_password": "newpassword1234"},
+            json={
+                "current_password": "supersecretpassword1",
+                "new_password": "newpassword1234",
+            },
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert change_resp.status_code == 200

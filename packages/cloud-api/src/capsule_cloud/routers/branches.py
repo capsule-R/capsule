@@ -1,19 +1,18 @@
 from fastapi import APIRouter, Depends
-from typing import List, Dict
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from capsule_cloud.auth import get_current_user, get_workspace_member
 from capsule_cloud.database import get_db
 from capsule_cloud.models import User
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/branches", tags=["branches"])
 
 # In-process branch registry, keyed by workspace_id. Populated by the
 # session branch endpoint in sessions.py until DB persistence lands.
-BRANCH_STORE: dict[str, List[Dict]] = {}
+BRANCH_STORE: dict[str, list[dict]] = {}
 
 
-@router.get("", response_model=List[Dict])
+@router.get("", response_model=list[dict])
 async def list_branches(
     workspace_id: str,
     current_user: User = Depends(get_current_user),

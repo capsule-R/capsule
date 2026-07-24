@@ -11,10 +11,6 @@ Usage:
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 
 def _local_path(key: str) -> str:
@@ -46,6 +42,7 @@ def _local_exists(key: str) -> bool:
 def _make_client(settings):  # pragma: no cover
     """Return a context-manager for an aiobotocore S3 client."""
     import aiobotocore.session  # type: ignore[import-untyped]
+
     session = aiobotocore.session.get_session()
     return session.create_client(
         "s3",
@@ -63,6 +60,7 @@ async def upload(key: str, data: bytes) -> None:
     (useful for local development).
     """
     from capsule_cloud.config import get_settings
+
     settings = get_settings()
 
     if not settings.storage_endpoint:
@@ -86,11 +84,14 @@ async def download(key: str) -> bytes:
     (remote) if the key does not exist.
     """
     from capsule_cloud.config import get_settings
+
     settings = get_settings()
 
     if not settings.storage_endpoint:
         if not _local_exists(key):
-            raise FileNotFoundError(f"Session file not found locally: {key}")  # pragma: no cover
+            raise FileNotFoundError(
+                f"Session file not found locally: {key}"
+            )  # pragma: no cover
         return _local_read(key)
 
     async with _make_client(settings) as client:  # pragma: no cover
@@ -104,6 +105,7 @@ async def download(key: str) -> bytes:
 async def delete(key: str) -> None:  # pragma: no cover
     """Delete an object from storage (best-effort; does not raise on missing key)."""
     from capsule_cloud.config import get_settings
+
     settings = get_settings()
 
     if not settings.storage_endpoint:

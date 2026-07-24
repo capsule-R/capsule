@@ -120,7 +120,9 @@ class TestReplayStatus:
         )
         assert resp.status_code == 404
 
-    async def test_replay_status_unauthenticated(self, client, auth_headers, workspace_id):
+    async def test_replay_status_unauthenticated(
+        self, client, auth_headers, workspace_id
+    ):
         sid = str(uuid.uuid4())
         await _upload_session(client, workspace_id, auth_headers, sid)
         trigger_resp = await client.post(

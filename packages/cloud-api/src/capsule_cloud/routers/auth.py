@@ -54,7 +54,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _used_reset_jtis: set[str] = set()
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
+)
 @limiter.limit("3/minute")
 async def signup(
     request: Request, body: SignupRequest, db: AsyncSession = Depends(get_db)
@@ -80,7 +82,9 @@ async def signup(
 
     # Create a default personal workspace for the new user
     ws_id = str(ulid.new())
-    slug_base = str(body.email).split("@")[0].lower().replace(".", "-").replace("_", "-")
+    slug_base = (
+        str(body.email).split("@")[0].lower().replace(".", "-").replace("_", "-")
+    )
     # ensure slug uniqueness (append partial user id)
     slug = f"{slug_base}-{user_id[-6:].lower()}"
     workspace = Workspace(
@@ -124,7 +128,9 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    valid = await anyio.to_thread.run_sync(verify_password, body.password, user.hashed_password)
+    valid = await anyio.to_thread.run_sync(
+        verify_password, body.password, user.hashed_password
+    )
     if not valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -169,7 +175,9 @@ async def update_me(
     if body.email is not None:
         # Check uniqueness
         result = await db.execute(
-            select(User).where(User.email == str(body.email), User.id != current_user.id)
+            select(User).where(
+                User.email == str(body.email), User.id != current_user.id
+            )
         )
         if result.scalars().first():
             raise HTTPException(
@@ -202,7 +210,9 @@ async def change_password(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect",
         )
-    current_user.hashed_password = await anyio.to_thread.run_sync(hash_password, body.new_password)
+    current_user.hashed_password = await anyio.to_thread.run_sync(
+        hash_password, body.new_password
+    )
     # A password change should evict anyone else holding a valid refresh
     # token for this account (e.g. an attacker with a stolen token) — not
     # just future requests using the current session's own tokens.
@@ -239,6 +249,7 @@ async def forgot_password(
     to the console instead so the flow is testable without email.
     """
     import structlog as _log
+
     logger = _log.get_logger(__name__)
 
     # Always return the same message to avoid user enumeration
@@ -259,6 +270,7 @@ async def forgot_password(
 
         if settings.resend_api_key:
             import httpx
+
             reset_url = f"{settings.frontend_url}/reset-password?token={reset_token}"
             html_content = f"""
             <p>Hi,</p>
@@ -277,16 +289,22 @@ async def forgot_password(
                             "subject": "Reset your Capsule password",
                             "html": html_content,
                         },
-                        timeout=5.0
+                        timeout=5.0,
                     )
                     response.raise_for_status()
                 logger.info("password_reset.email_sent", email=str(body.email))
             except Exception as e:
                 # If we get an error response, try to log the body too
                 err_msg = str(e)
-                if hasattr(e, 'response') and getattr(e, 'response') is not None and hasattr(e.response, 'text'):
+                if (
+                    hasattr(e, "response")
+                    and e.response is not None
+                    and hasattr(e.response, "text")
+                ):
                     err_msg += f" - {e.response.text}"
-                logger.error("password_reset.email_failed", email=str(body.email), error=err_msg)
+                logger.error(
+                    "password_reset.email_failed", email=str(body.email), error=err_msg
+                )
 
         if settings.environment == "development":
             # Never echo the token in the response — log it so the flow is
@@ -297,7 +315,9 @@ async def forgot_password(
                 reset_token=reset_token,
             )
 
-    return {"message": "If an account exists with that email, you'll receive a reset link shortly."}
+    return {
+        "message": "If an account exists with that email, you'll receive a reset link shortly."
+    }
 
 
 @router.post("/reset-password")
@@ -316,7 +336,7 @@ async def reset_password(
         user_id: str = payload["sub"]
         jti: str | None = payload.get("jti")
     except HTTPException:
-        raise _bad_token
+        raise _bad_token from None
 
     # Enforce single-use: reject if this token's jti has already been consumed
     if jti:
@@ -331,7 +351,9 @@ async def reset_password(
     if user is None:
         raise _bad_token
 
-    user.hashed_password = await anyio.to_thread.run_sync(hash_password, body.new_password)
+    user.hashed_password = await anyio.to_thread.run_sync(
+        hash_password, body.new_password
+    )
     # Otherwise an attacker's stolen refresh token would keep minting access
     # tokens for up to 30 days after the victim "recovered" their account.
     revoke_all_refresh_tokens(user)

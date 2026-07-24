@@ -7,8 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
 
-
 # ── Auth ─────────────────────────────────────────────────────
+
 
 class SignupRequest(BaseModel):
     email: EmailStr
@@ -43,6 +43,7 @@ class RefreshRequest(BaseModel):
 
 # ── Users ────────────────────────────────────────────────────
 
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -74,6 +75,7 @@ class LogoutRequest(BaseModel):
 
 # ── Workspaces ───────────────────────────────────────────────
 
+
 class CreateWorkspaceRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     slug: str = Field(min_length=2, max_length=50, pattern=r"^[a-z0-9-]+$")
@@ -99,6 +101,7 @@ class WorkspaceResponse(BaseModel):
 
 # ── Workspace members ────────────────────────────────────────
 
+
 class InviteMemberRequest(BaseModel):
     email: EmailStr
     role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
@@ -116,6 +119,7 @@ class MemberResponse(BaseModel):
 
 
 # ── Sessions ─────────────────────────────────────────────────
+
 
 class SessionUploadMetadata(BaseModel):
     # Pattern restricts path traversal and header-injection characters
@@ -165,16 +169,17 @@ class DailyCount(BaseModel):
 class SessionStatsResponse(BaseModel):
     """Aggregate session metrics for the dashboard overview."""
 
-    total: int                 # all-time, non-deleted
-    failed: int                # all-time failed
-    total_cost_usd: float      # all-time sum
+    total: int  # all-time, non-deleted
+    failed: int  # all-time failed
+    total_cost_usd: float  # all-time sum
     total_input_tokens: int
     total_output_tokens: int
     range_days: int
-    daily: list[DailyCount]    # captured-per-day over the requested range
+    daily: list[DailyCount]  # captured-per-day over the requested range
 
 
 # ── Replays ──────────────────────────────────────────────────
+
 
 class TriggerReplayRequest(BaseModel):
     mode: str = Field(default="cassette", pattern=r"^(cassette|live)$")
@@ -202,6 +207,7 @@ class ReplayStatusResponse(BaseModel):
 
 # ── Branches ─────────────────────────────────────────────────
 
+
 class BranchCreateRequest(BaseModel):
     from_step: int = Field(ge=0)
     note: str | None = Field(default=None, max_length=2000)
@@ -212,6 +218,7 @@ class BranchCreateResponse(BaseModel):
 
 
 # ── API Keys ─────────────────────────────────────────────────
+
 
 class CreateApiKeyRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
@@ -234,6 +241,7 @@ class ApiKeyResponse(BaseModel):
 
 # ── Health ───────────────────────────────────────────────────
 
+
 class HealthResponse(BaseModel):
     status: str = "ok"
     version: str
@@ -241,6 +249,7 @@ class HealthResponse(BaseModel):
 
 
 # ── Errors (RFC 7807) ────────────────────────────────────────
+
 
 class ProblemDetail(BaseModel):
     type: str = "about:blank"
